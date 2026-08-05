@@ -6,7 +6,7 @@ on:
       - "admin-panel/**"
       - "packages/shared-types/**"
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "admin-panel/**"
       - "packages/shared-types/**"

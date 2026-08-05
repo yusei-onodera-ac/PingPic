@@ -6,7 +6,7 @@ on:
       - "functions/**"
       - "packages/shared-types/**"
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - "functions/**"
       - "packages/shared-types/**"
