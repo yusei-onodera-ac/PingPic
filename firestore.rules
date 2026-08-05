@@ -60,13 +60,55 @@ service cloud.firestore {
     }
 
     // --- posts/{postId} ---
-    // { groupId, userId, date, slotNumber, photoUrl, postedAt }
+    // { groupId, userId, date, slotNumber, photoUrl, postedAt, isPublic,
+    //   caption, likeCount }
     match /posts/{postId} {
       allow create: if isSignedIn()
                     && request.resource.data.userId == request.auth.uid
-                    && isGroupMember(request.resource.data.groupId);
-      allow read: if isSignedIn() && isGroupMember(resource.data.groupId);
-      allow update, delete: if isAdmin(); // authors don't edit/delete posts per spec (no editing feature)
+                    && isGroupMember(request.resource.data.groupId)
+                    // likeCount must start at 0 — only the likes trigger
+                    // (Admin SDK) ever changes it after creation.
+                    && request.resource.data.likeCount == 0;
+      // Visible to your group always; visible to ANYONE signed in if the
+      // author chose to make it public (the "みんなの投稿" feed) — see
+      // Post.isPublic's doc comment in shared-types.
+      allow read: if isSignedIn()
+                  && (resource.data.isPublic == true || isGroupMember(resource.data.groupId));
+      // Authors don't edit/delete posts per spec (no editing feature).
+      // likeCount is the one field non-admins never touch directly either
+      // — see posts/{postId}/likes/{uid} below, which drives it via a
+      // server-side trigger instead of a client-writable counter.
+      allow update, delete: if isAdmin();
+
+      // --- posts/{postId}/likes/{uid} ---
+      // Doc id IS the liker's uid — "like" = create this doc,
+      // "unlike" = delete it. Existence alone is the signal (see Like's
+      // doc comment in shared-types). Anyone who can read the post can
+      // see (and cast) likes on it; a user can only create/delete their
+      // OWN like doc, never anyone else's.
+      match /likes/{uid} {
+        allow read: if isSignedIn()
+                    && (get(/databases/$(database)/documents/posts/$(postId)).data.isPublic == true
+                        || isGroupMember(get(/databases/$(database)/documents/posts/$(postId)).data.groupId));
+        allow create, delete: if isSignedIn() && request.auth.uid == uid;
+        allow update: if false; // no fields to update — recreate instead
+      }
+
+      // --- posts/{postId}/comments/{commentId} ---
+      // { userId, displayName, text, createdAt }
+      match /comments/{commentId} {
+        allow read: if isSignedIn()
+                    && (get(/databases/$(database)/documents/posts/$(postId)).data.isPublic == true
+                        || isGroupMember(get(/databases/$(database)/documents/posts/$(postId)).data.groupId));
+        allow create: if isSignedIn()
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 280;
+        // No edit/delete-by-author for the same reason posts themselves
+        // don't have one — keep the "no editing" posture consistent.
+        allow update, delete: if isAdmin();
+      }
     }
 
     // --- prompt_suggestions/{suggestionId} ---

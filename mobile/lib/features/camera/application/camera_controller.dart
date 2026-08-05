@@ -142,6 +142,9 @@ class CaptureController extends StateNotifier<CaptureState> {
     required Uint8List photoBytes,
     required String date,
     required int slotNumber,
+    required String promptText,
+    required bool isPublic,
+    required String caption,
   }) async {
     state = const CaptureState.uploading();
     try {
@@ -156,6 +159,9 @@ class CaptureController extends StateNotifier<CaptureState> {
         groupId: groupId,
         date: date,
         slotNumber: slotNumber,
+        promptText: promptText,
+        isPublic: isPublic,
+        caption: caption,
       );
       // Best-effort — a widget update failure shouldn't surface as an
       // upload failure to the user, the post itself already succeeded.

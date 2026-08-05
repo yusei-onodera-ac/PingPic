@@ -2,22 +2,26 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../features/feed/presentation/feed_screen.dart';
 import '../../features/camera/presentation/camera_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/suggestions/presentation/suggestion_form_screen.dart';
 import '../../features/groups/presentation/group_setup_screen.dart';
+import '../../features/public_feed/presentation/post_detail_screen.dart';
 import '../di/providers.dart';
+import '../widgets/home_shell.dart';
 
 /// Route names/paths. The `/camera` route is the deep-link target for both
 /// notification taps and home-screen-widget taps — see
 /// push_notification_service.dart and docs/IOS_WIDGET_SETUP.md.
 abstract class AppRoutes {
   static const login = '/login';
+  /// HomeShell — the two-tab (グループ/みんな) bottom-nav shell, not a
+  /// single screen anymore since the public feed was added.
   static const feed = '/';
   static const camera = '/camera';
   static const suggest = '/suggest';
   static const groupSetup = '/group-setup';
+  static const publicPostDetail = '/public-post';
 }
 
 /// Bridges a Stream (authRepository.authStateChanges()) to the Listenable
@@ -65,7 +69,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.feed,
-        builder: (context, state) => const FeedScreen(),
+        builder: (context, state) => const HomeShell(),
       ),
       GoRoute(
         path: AppRoutes.groupSetup,
@@ -81,6 +85,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.suggest,
         builder: (context, state) => const SuggestionFormScreen(),
+      ),
+      GoRoute(
+        path: '${AppRoutes.publicPostDetail}/:postId',
+        builder: (context, state) =>
+            PostDetailScreen(postId: state.pathParameters['postId']!),
       ),
     ],
   );

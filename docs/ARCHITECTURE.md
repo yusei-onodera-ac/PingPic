@@ -60,9 +60,16 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
   rather than Firebase Hosting + Cloud Run "web frameworks" support, to avoid paying for an
   always-on container for what's a low-traffic internal tool. `firebase.json` deliberately does
   **not** wire Hosting rewrites for it — this is a documented open decision, not a blocker.
-- **Firestore composite indexes**: none are pre-declared (`firestore.indexes.json` is empty) —
-  add them only once real queries (e.g. `posts` by `groupId + date + slotNumber`) are built, to
-  avoid maintaining unused indexes.
+- **Firestore composite indexes**: declared only for queries that actually exist and need one
+  (the public feed's two sort orders, the admin panel's pending-suggestions queue) — see
+  `firestore.indexes.json` and [DATA_MODEL.md](./DATA_MODEL.md) "Composite indexes". Multi-field
+  equality-only queries (e.g. `watchGroupPosts`'s `groupId + date`) deliberately don't get one —
+  Firestore serves those from automatic single-field indexes already.
+- **Likes via a trigger, not a client counter**: `posts/{postId}/likes/{uid}` create/delete fires
+  a Firestore trigger (`functions/src/triggers/likes.ts`) that increments/decrements
+  `Post.likeCount` server-side, rather than loosening `posts`' write rule to let any signed-in
+  user (now potentially the whole user base, via public posts) touch the post document directly.
+  Trigger invocations are bounded by actual like-button presses, not a scheduled cost driver.
 
 ## Known open gaps
 
@@ -120,3 +127,42 @@ that slot, per the design doc's retention mechanic. Deliberately shows nothing a
 a blurred thumbnail) before that — a blurred `<img>` still means the bytes were fetched, so
 "count of who's posted, no images" is the honest way to keep that boundary. See
 `mobile/lib/features/feed/presentation/feed_screen.dart`.
+
+### Resolved: public posts / みんなの投稿 (like/comment system)
+
+Design decision (not in the original spec, added mid-session): at capture time, the poster can
+make an individual photo public — visible to any signed-in user via a new "みんなの投稿" tab, not
+just their group — with an optional one-line caption, likes, and comments. Deliberately a
+capture-time choice, not toggleable afterward (no editing flow anywhere else in the app either).
+
+- `mobile`'s root screen is now `HomeShell` (`core/widgets/home_shell.dart`), a two-tab
+  `NavigationBar` shell (グループ / みんな) — `AppRoutes.feed` ("/") builds this instead of
+  `FeedScreen` directly now.
+- The public feed (`features/public_feed/`) is a flat, group-independent stream of every public
+  post — deliberately mixing posts from different prompts/dates/groups together rather than
+  grouping by prompt. Each card denormalizes and shows its own `promptText` (so a mixed feed still
+  makes sense per-card) and defaults to most-liked-first (`PublicFeedSort.mostLiked`), with a
+  toggle to newest-first — see `PublicFeedRepository.watchPublicPosts`.
+- Card design deliberately follows Instagram's post-card convention (avatar+name header, full-
+  width photo, like/comment icon row, caption, "view comments" link) since that's a well-
+  understood pattern for exactly this kind of public social feed — see `widgets/post_card.dart`.
+- Likes: see the cost-design note above on why a Cloud Functions trigger drives `likeCount`
+  rather than a client-writable counter.
+- Comments: a straightforward `posts/{postId}/comments` subcollection, no edit/delete-by-author
+  (same "no editing" posture as posts themselves), 1–280 chars enforced in `firestore.rules`.
+- `authorDisplayName` and `promptText` are both denormalized onto `Post` at write time — there's
+  no user-profile collection to join against, and re-deriving the prompt from `daily_schedules`
+  per card would mean an extra read per post in a feed that can mix many different dates.
+
+## UI design system (mobile)
+
+Introduced mid-session alongside a broader visual pass — see `mobile/lib/core/theme/`:
+`app_colors.dart` (a small hand-picked palette: warm coral primary, muted teal-green for
+"posted"/success states, near-black/warm-cream surfaces — not a BeReal clone, but takes cues from
+it and from Instagram's social-feed conventions per this session's direction) and
+`app_text_styles.dart` (a hand-tuned type scale using system fonts — no `google_fonts` dependency,
+since every string in this app is Japanese and a Latin-only display font wouldn't affect any of
+the copy that actually needs it). `core/widgets/` holds cross-screen pieces built alongside this
+pass: `CountdownText` (also what finally implements the design doc's slot-3
+"当日24:00まで(カウントダウン表示)" requirement, which earlier passes had missed), `EmptyState`,
+`StatusPill`.

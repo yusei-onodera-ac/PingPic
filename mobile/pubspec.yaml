@@ -6,7 +6,9 @@ publish_to: "none"
 version: 0.0.1+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  # 3.6+ specifically because AppTheme uses CardThemeData (ThemeData.cardTheme's
+  # modern type — older SDKs only accept the since-soft-deprecated CardTheme).
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:

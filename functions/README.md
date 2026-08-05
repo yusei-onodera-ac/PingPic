@@ -27,13 +27,20 @@ src/
 │   ├── dailyBatchJob.ts           # 00:00 cron — implemented
 │   └── sendScheduledPrompt.ts     # HTTPS, invoked by Cloud Tasks — implemented
 ├── callable/
-│   └── groups.ts                  # createGroup / joinGroupByInviteCode — implemented
+│   └── groups.ts                  # createGroup / joinGroupByInviteCode / leaveGroup — implemented
+├── triggers/
+│   └── likes.ts                   # onLikeCreated / onLikeDeleted — maintains Post.likeCount
 ├── services/
 │   ├── scheduleService.ts         # implemented
 │   ├── promptPoolService.ts       # implemented
 │   └── notificationService.ts     # implemented (Cloud Tasks scheduling)
 └── utils/timeSlot.ts              # implemented (pickValidSendTime algorithm + tests)
 ```
+
+`triggers/likes.ts` reacts to `posts/{postId}/likes/{uid}` create/delete and updates
+`Post.likeCount` via the Admin SDK — see [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) "Cost
+design" for why this is a trigger rather than a client-writable counter field (now that posts can
+be public, "who can increment likeCount" is a much bigger trust boundary than group-only ever was).
 
 `callable/groups.ts` is the invite-code based group create/join flow — a design decision made
 when implementing it (the design doc never specified one), documented in

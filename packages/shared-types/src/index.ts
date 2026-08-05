@@ -91,11 +91,58 @@ export type SlotNumber = 1 | 2 | 3;
 export interface Post {
   groupId: string;
   userId: string;
+  /** Denormalized from Firebase Auth's user.displayName at post time —
+   * there's no separate user-profile collection in this app (yet), and
+   * the public feed needs a name to show in its Instagram-style card
+   * header without a per-card user lookup. Matches the same
+   * "userId ?? email ?? '匿名ユーザー'" fallback used for prompt
+   * suggestions' submitterInfo. */
+  authorDisplayName: string;
   /** "YYYY-MM-DD" */
   date: string;
   slotNumber: SlotNumber;
   photoUrl: string;
   postedAt: FirestoreTimestamp;
+  /** Denormalized copy of the slot's ScheduleSlot.promptText at post
+   * time — so the "みんなの投稿" public feed and post detail screen can
+   * show what prompt a photo was answering without an extra
+   * daily_schedules read per post. Never updated after creation (there's
+   * no prompt-editing flow that would need to keep it in sync). */
+  promptText: string;
+  /**
+   * Chosen at capture time (not toggleable afterward — see
+   * mobile's CapturedPreviewView). A public post is visible to any
+   * signed-in user via the "みんなの投稿" feed, not just this post's
+   * group — see firestore.rules' posts read rule.
+   */
+  isPublic: boolean;
+  /** Optional one-line comment posted alongside a public photo. Present
+   * (possibly empty-string) even on private posts for schema simplicity,
+   * but only ever shown in the UI for public ones. */
+  caption: string;
+  /** Denormalized count, maintained server-side by
+   * functions/src/triggers/likes.ts reacting to the posts/{postId}/likes
+   * subcollection — never written directly by clients (see
+   * firestore.rules: posts.allow update is admin-only). */
+  likeCount: number;
+}
+
+/** posts/{postId}/likes/{uid} — doc id IS the liker's uid, so "like" is
+ * just create-this-doc and "unlike" is delete-this-doc; existence alone
+ * is the signal, no fields needed. Drives likeCount via a Cloud
+ * Functions trigger rather than a client-side counter update, so the
+ * `posts` collection's write rule can stay admin-only even though
+ * "everyone" can now see public posts. */
+export interface Like {
+  createdAt: FirestoreTimestamp;
+}
+
+/** posts/{postId}/comments/{commentId} */
+export interface Comment {
+  userId: string;
+  displayName: string;
+  text: string;
+  createdAt: FirestoreTimestamp;
 }
 
 // -----------------------------------------------------------------------

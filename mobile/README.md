@@ -21,17 +21,24 @@ flutter run -d <ios-simulator-id>
 ```
 lib/
 ├── main.dart, app.dart, firebase_options.dart (placeholder — needs `flutterfire configure`)
-├── core/{theme, routing/app_router.dart (real auth-based redirect), di/providers.dart}
+├── core/
+│   ├── theme/            # AppColors, AppTextStyles, AppTheme — see docs/ARCHITECTURE.md
+│   │                       "UI design system" for the design rationale
+│   ├── widgets/           # CountdownText, EmptyState, StatusPill, HomeShell (bottom-nav shell)
+│   ├── routing/app_router.dart  # real auth-based redirect
+│   └── di/providers.dart
 ├── features/
-│   ├── camera/          # in-app-only capture — real (camera package + Storage/Firestore upload)
-│   ├── feed/             # real group feed — posts hidden per-slot until you post your own
-│   ├── prompts/data/     # DailySchedule model, mirrors shared-types
-│   ├── notifications/    # real (firebase_messaging + local notifications + tap deep-link)
-│   ├── auth/              # real, email/password (method itself is an open product decision)
-│   ├── suggestions/       # real (writes prompt_suggestions)
-│   ├── groups/             # real (invite-code create/join via Cloud Functions callables)
-│   └── widget_bridge/     # real (home_widget <-> WidgetKit data bridge)
-└── shared/models/         # Group, Post, PromptSuggestion — mirror shared-types
+│   ├── camera/           # in-app-only capture — real (camera package + Storage/Firestore upload),
+│   │                       plus a per-photo public/private + caption choice at capture time
+│   ├── feed/              # real group feed — posts hidden per-slot until you post your own
+│   ├── public_feed/       # NEW — "みんなの投稿": public posts, likes, comments (Instagram-card style)
+│   ├── prompts/data/      # DailySchedule model, mirrors shared-types
+│   ├── notifications/     # real (firebase_messaging + local notifications + tap deep-link)
+│   ├── auth/               # real, email/password (method itself is an open product decision)
+│   ├── suggestions/        # real (writes prompt_suggestions)
+│   ├── groups/              # real (invite-code create/join via Cloud Functions callables)
+│   └── widget_bridge/      # real (home_widget <-> WidgetKit data bridge)
+└── shared/models/          # Group, Post, Comment, PromptSuggestion — mirror shared-types
 ```
 
 Still genuinely stubbed/TODO despite the above being "real":
@@ -41,6 +48,7 @@ Still genuinely stubbed/TODO despite the above being "real":
   flow, see FeedScreen's app bar menu, just no multi-group support)
 - Image compression parameters (1600px / quality 80 in `CaptureController.capture`) are a
   starting guess, not tuned against real device photos
+- Public feed pagination — `watchPublicPosts` caps at 50 posts, no infinite scroll yet
 
 For the iOS home screen widget (WidgetKit extension, App Group setup), see
 [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md) — it's a manual Xcode step performed

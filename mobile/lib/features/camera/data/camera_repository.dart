@@ -16,6 +16,9 @@ abstract class CameraRepository {
     required String groupId,
     required String date, // "YYYY-MM-DD"
     required int slotNumber,
+    required String promptText,
+    required bool isPublic,
+    required String caption,
   });
 }
 
@@ -38,11 +41,15 @@ class CameraRepositoryImpl implements CameraRepository {
     required String groupId,
     required String date,
     required int slotNumber,
+    required String promptText,
+    required bool isPublic,
+    required String caption,
   }) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) {
+    final user = _auth.currentUser;
+    if (user == null) {
       throw StateError('uploadPost: no authenticated user');
     }
+    final uid = user.uid;
 
     // storage.rules caps uploads at 8MB server-side; CaptureController
     // already compresses before this point (that's what actually keeps
@@ -64,14 +71,22 @@ class CameraRepositoryImpl implements CameraRepository {
 
     // Matches Post in packages/shared-types/src/index.ts field-for-field
     // (camelCase) — see docs/DATA_MODEL.md and the firestore.rules note
-    // about why that consistency matters.
+    // about why that consistency matters. likeCount MUST start at 0 —
+    // firestore.rules' posts.create check enforces that too, since it's
+    // the one field non-admins never write directly after creation (see
+    // functions/src/triggers/likes.ts).
     await postRef.set({
       'groupId': groupId,
       'userId': uid,
+      'authorDisplayName': user.displayName ?? user.email ?? '匿名ユーザー',
       'date': date,
       'slotNumber': slotNumber,
       'photoUrl': photoUrl,
       'postedAt': FieldValue.serverTimestamp(),
+      'promptText': promptText,
+      'isPublic': isPublic,
+      'caption': caption,
+      'likeCount': 0,
     });
 
     return photoUrl;

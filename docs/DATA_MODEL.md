@@ -55,17 +55,52 @@ enumerated without going through that function's validation.
 
 ## `posts/{postId}`
 
-| field      | type                     | notes |
-|------------|--------------------------|-------|
-| groupId    | `string`                 | → `groups/{groupId}` |
-| userId     | `string`                 | Firebase Auth uid |
-| date       | `string` (`YYYY-MM-DD`)  | |
-| slotNumber | `1 \| 2 \| 3`            | |
-| photoUrl   | `string`                 | Storage download URL, `posts/{uid}/...` |
-| postedAt   | Firestore `Timestamp`    | |
+| field             | type                     | notes |
+|-------------------|--------------------------|-------|
+| groupId           | `string`                 | → `groups/{groupId}` |
+| userId            | `string`                 | Firebase Auth uid |
+| authorDisplayName | `string`                 | denormalized at post time — no separate user-profile collection exists |
+| date              | `string` (`YYYY-MM-DD`)  | |
+| slotNumber        | `1 \| 2 \| 3`            | |
+| photoUrl          | `string`                 | Storage download URL, `posts/{groupId}/{uid}/...` |
+| postedAt          | Firestore `Timestamp`    | |
+| promptText        | `string`                 | denormalized copy of the slot's prompt at post time |
+| isPublic          | `boolean`                | chosen once at capture time, never toggled after — see below |
+| caption           | `string`                 | optional one-line comment, only meaningful/shown when `isPublic` |
+| likeCount         | `number`                 | maintained server-side, see below — never client-writable |
 
 No edit/delete-by-owner path — the spec has no photo-editing feature, so `posts` are
 effectively append-only from the client's perspective (rules only allow admin update/delete).
+
+**Design decision (not in the original spec)**: at capture time, the poster can choose to make a
+photo public. A public post becomes visible to any signed-in user via the "みんなの投稿" feed —
+not just the poster's group — and can carry a caption, likes, and comments. This is deliberately
+NOT toggleable after posting (no editing flow, consistent with the rest of the app). Private
+(the default) posts behave exactly as before: group-only, no caption/like/comment UI shown.
+
+### `posts/{postId}/likes/{uid}`
+
+| field     | type                   | notes |
+|-----------|------------------------|-------|
+| createdAt | Firestore `Timestamp`  | |
+
+Doc id IS the liker's uid — liking = create this doc, unliking = delete it; existence alone is
+the signal, no other fields needed. Clients only ever create/delete their OWN like doc — they
+never write `posts.likeCount` directly. `functions/src/triggers/likes.ts` (Firestore
+onCreate/onDelete triggers) maintains that counter server-side instead, so `posts`' write rule
+can stay admin-only even though "like" is now a plain signed-in-user action on documents that
+might be visible to the entire user base.
+
+### `posts/{postId}/comments/{commentId}`
+
+| field       | type                   | notes |
+|-------------|------------------------|-------|
+| userId      | `string`               | |
+| displayName | `string`               | denormalized, same convention as `authorDisplayName` |
+| text        | `string`               | 1–280 chars, enforced in firestore.rules |
+| createdAt   | Firestore `Timestamp`  | |
+
+No edit/delete-by-author, same "no editing" posture as posts themselves.
 
 ## `prompt_suggestions/{suggestionId}`
 
@@ -89,5 +124,10 @@ Used only by `dailyBatchJob` (via Admin SDK, bypasses rules) and the admin panel
 
 ## Composite indexes
 
-None pre-declared (`firestore.indexes.json` starts empty). Add them once real queries land —
-the most likely first one is `posts` filtered by `groupId` + `date`, ordered by `slotNumber`.
+Declared in `firestore.indexes.json`:
+- `posts`: `isPublic ASC, postedAt DESC` — the "みんなの投稿" feed's newest-first sort.
+- `posts`: `isPublic ASC, likeCount DESC` — that feed's default most-liked-first sort.
+- `prompt_suggestions`: `status ASC, createdAt ASC` — the admin panel's pending-suggestions queue.
+
+`groupId + date` (two pure equality filters, used by `watchGroupPosts`) does NOT need one —
+Firestore serves multi-field equality-only queries from its automatic single-field indexes.
