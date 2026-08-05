@@ -24,7 +24,7 @@ lib/
 ├── core/{theme, routing/app_router.dart (real auth-based redirect), di/providers.dart}
 ├── features/
 │   ├── camera/          # in-app-only capture — real (camera package + Storage/Firestore upload)
-│   ├── feed/             # real, but NOT group-scoped yet (see groups gap below)
+│   ├── feed/             # real group feed — posts hidden per-slot until you post your own
 │   ├── prompts/data/     # DailySchedule model, mirrors shared-types
 │   ├── notifications/    # real (firebase_messaging + local notifications + tap deep-link)
 │   ├── auth/              # real, email/password (method itself is an open product decision)
@@ -35,16 +35,15 @@ lib/
 ```
 
 Still genuinely stubbed/TODO despite the above being "real":
-- Image compression before upload (cost guardrail — see `CaptureController.capture`)
-- A real shared group feed (seeing groupmates' blurred/unblurred posts) — FeedScreen currently
-  only shows the signed-in user's own post status per slot; groups themselves are real now (see
-  `features/groups/`), this is specifically the "see everyone else's posts" UI that's still
-  unbuilt
-- Calling `HomeWidgetService.updateWidgetData` from the real app flow (service itself works, just
-  not wired to a call site yet)
+- `FirebaseMessaging.onBackgroundMessage` — the widget only updates while the app process is
+  alive (foreground, or backgrounded-but-not-killed); a prompt arriving while fully terminated
+  won't reach the widget until the app is next opened. See
+  `features/widget_bridge/home_widget_service.dart`'s TODO.
 - The native WidgetKit SwiftUI view itself and its Xcode target (manual step, see
   [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md))
 - "Leave group" / belonging to more than one group (MVP is intentionally one group per user)
+- Image compression parameters (1600px / quality 80 in `CaptureController.capture`) are a
+  starting guess, not tuned against real device photos
 
 For the iOS home screen widget (WidgetKit extension, App Group setup), see
 [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md) — it's a manual Xcode step performed

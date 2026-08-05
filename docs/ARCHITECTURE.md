@@ -69,16 +69,15 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
   `middleware.ts` + session cookies (`Admin SDK.createSessionCookie`). Scaffolded as a TODO —
   see `admin-panel/src/components/layout/AuthGuard.tsx`.
 - **Hosting choice for `admin-panel`**: Vercel vs. Firebase Hosting is left open; see above.
-- **Group feed UI**: now that `groups` exists (see below), `mobile`'s FeedScreen only shows the
-  signed-in user's own post status per slot — a real shared group feed (seeing groupmates'
-  blurred/unblurred posts, per the design doc's retention mechanic) is still unbuilt.
 - **No "leave group" / multi-group support**: the invite-code flow (below) is intentionally an
   MVP simplification — one group per user, no leave flow.
-- **Image compression before upload**: not implemented — see
-  `mobile/lib/features/camera/application/camera_controller.dart`'s TODO. `storage.rules` only
-  rejects >8MB, it doesn't shrink anything.
-- **HomeWidgetService not called from any real app flow yet**: the service and its App Group
-  wiring work, but nothing invokes `updateWidgetData` after a prompt notification or a post yet.
+- **Widget updates only reach a live app process**: `HomeWidgetService` is wired to real call
+  sites now (a new prompt notification, and after posting), but there's no
+  `FirebaseMessaging.onBackgroundMessage` handler, so a prompt that arrives while the app is
+  fully terminated won't update the widget until the app is next opened. See
+  `mobile/lib/features/widget_bridge/home_widget_service.dart`'s TODO.
+- **Image compression tuning**: `CaptureController.capture()` compresses to ~1600px/quality 80
+  before upload, but those numbers are a starting guess, not tuned against real device photos.
 
 ### Resolved: `groups` collection (was previously unconfirmed)
 
@@ -88,5 +87,14 @@ this: **invite-code based create/join**, one group per user for this MVP. `creat
 `invite_codes` get written — never direct client writes — so invite-code uniqueness is enforced
 with a server-side Firestore transaction, and `firestore.rules` stays simple (members can read
 their own group; everything else is `allow write: if false`). This also finally let
-`posts` and Storage's `posts.rules` enforce real group-membership checks instead of the
+`posts` and Storage's `storage.rules` enforce real group-membership checks instead of the
 placeholder TODOs from earlier passes.
+
+### Resolved: group feed UI
+
+`mobile`'s FeedScreen now shows a real group feed, not just the signed-in user's own status:
+each slot's photos (yours and groupmates') only become visible once you've posted your own for
+that slot, per the design doc's retention mechanic. Deliberately shows nothing at all (not even
+a blurred thumbnail) before that — a blurred `<img>` still means the bytes were fetched, so
+"count of who's posted, no images" is the honest way to keep that boundary. See
+`mobile/lib/features/feed/presentation/feed_screen.dart`.
