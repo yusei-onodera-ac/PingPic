@@ -1,0 +1,24 @@
+{
+  "name": "pingpic",
+  "private": true,
+  "version": "0.0.1",
+  "description": "PingPic monorepo root — npm workspaces for the Firebase backend, admin panel, and shared types. The Flutter app in mobile/ is a separate Dart/pub project outside this workspace.",
+  "workspaces": [
+    "packages/*",
+    "functions",
+    "admin-panel"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "emulators": "firebase emulators:start --only firestore,functions,auth,storage"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

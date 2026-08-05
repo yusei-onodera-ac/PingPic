@@ -1,0 +1,56 @@
+# --- Node / TypeScript (functions, admin-panel, packages/shared-types) ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+dist/
+lib/
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+
+# --- Environment / secrets (never commit real values) ---
+.env
+.env.local
+.env.*.local
+serviceAccountKey.json
+*.p8
+*.p12
+*.jks
+*.keystore
+
+# --- Firebase ---
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+*-debug.log
+
+# --- Flutter / Dart (mobile/) ---
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/ios/Pods/
+mobile/ios/Flutter/ephemeral/
+mobile/ios/.symlinks/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/*.iml
+mobile/.idea/
+
+# NOTE: mobile/ios and mobile/android do not exist yet in this scaffold —
+# they are generated locally by `flutter create .` per docs/SETUP.md.
+# Once generated, GoogleService-Info.plist / google-services.json are
+# client identifiers (safe to commit per FlutterFire convention), but
+# any provisioning profile / signing cert must never be committed.
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

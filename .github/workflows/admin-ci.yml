@@ -1,0 +1,38 @@
+name: admin-ci
+
+on:
+  pull_request:
+    paths:
+      - "admin-panel/**"
+      - "packages/shared-types/**"
+  push:
+    branches: [main]
+    paths:
+      - "admin-panel/**"
+      - "packages/shared-types/**"
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm install
+      - run: npm run build --workspace=packages/shared-types
+      - run: npm run lint --workspace=admin-panel
+      - run: npm run type-check --workspace=admin-panel
+      - run: npm run build --workspace=admin-panel
+        env:
+          # Dummy values so `next build` doesn't fail on missing env at
+          # build time — real values live in Vercel project settings.
+          NEXT_PUBLIC_FIREBASE_API_KEY: "ci-placeholder"
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "ci-placeholder"
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: "ci-placeholder"
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "ci-placeholder"
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "ci-placeholder"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "ci-placeholder"
+    # NOTE: no deploy step — Vercel vs. Firebase Hosting is an open
+    # decision. See docs/ARCHITECTURE.md.

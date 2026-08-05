@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// PingPic Storage security rules — SCAFFOLD.
+// Inferred requirement: posts.photo_url implies a Storage bucket, though the
+// design doc's data model section never names one explicitly.
+//
+// Cost note: photo uploads are the main storage/egress cost driver. Client
+// (Flutter) MUST compress/resize before upload — see
+// mobile/lib/features/camera/data/camera_repository.dart TODO. Do not raise
+// these size limits without re-checking Firebase Storage free-tier quotas.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    // posts/{uid}/{postId}.jpg — one unedited photo per post, owner-uploaded.
+    match /posts/{uid}/{fileName} {
+      allow write: if isSignedIn()
+                   && request.auth.uid == uid
+                   && request.resource.size < 8 * 1024 * 1024 // 8MB cap, cost guardrail
+                   && request.resource.contentType.matches('image/.*');
+      allow read: if isSignedIn();
+                  // TODO: restrict to members of the post's group once groups collection exists
+      allow delete: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

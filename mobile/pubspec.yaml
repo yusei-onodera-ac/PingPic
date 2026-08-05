@@ -1,0 +1,63 @@
+name: pingpic
+description: >
+  PingPic — 1日3回のお題通知に合わせて無加工写真を撮影・グループで共有するログアプリ。
+  iOS優先、Flutterによるクロスプラットフォーム実装。
+publish_to: "none"
+version: 0.0.1+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.1.0
+  firebase_auth: ^5.1.0
+  cloud_firestore: ^5.0.0
+  firebase_storage: ^12.1.0
+  firebase_messaging: ^15.0.0
+
+  # In-app-only camera. Deliberately NOT using image_picker's camera source —
+  # that opens the native camera sheet (closer to "pick a photo") rather
+  # than a fully custom in-app camera UI with our own shutter/toggle
+  # controls. See docs/DATA_MODEL.md / design spec: no gallery import ever.
+  camera: ^0.11.0
+
+  # Request .camera permission ONLY — never .photos. This is how "app can
+  # only post what it just shot" is enforced at the OS permission layer.
+  permission_handler: ^11.3.0
+
+  # Local notification handling / tap routing (foreground display, deep link
+  # into the camera screen).
+  flutter_local_notifications: ^17.2.0
+
+  # Routing with deep-link support, so a notification tap can route
+  # straight to the camera screen.
+  go_router: ^14.2.0
+
+  # State management.
+  flutter_riverpod: ^2.5.1
+
+  # iOS Home Screen Widget bridge — writes prompt/post-status data into the
+  # shared App Group container that the WidgetKit extension reads from. See
+  # docs/IOS_WIDGET_SETUP.md.
+  home_widget: ^0.7.0
+
+  # Typed model codegen.
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.11
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true

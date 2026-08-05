@@ -1,0 +1,17 @@
+{
+  "name": "@pingpic/shared-types",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeScript types for PingPic Firestore documents, shared between functions and admin-panel. See docs/DATA_MODEL.md for the canonical schema description.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "rimraf": "^5.0.7"
+  }
+}

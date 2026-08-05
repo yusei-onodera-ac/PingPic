@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merge this App Group entry into the auto-generated
+  mobile/ios/Runner/Runner.entitlements (created when the App Groups
+  capability is enabled in Xcode — see docs/IOS_WIDGET_SETUP.md step 5).
+  The same group id must also be added to the PingPicWidget target's
+  entitlements.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.pingpic.app</string>
+    </array>
+</dict>
+</plist>

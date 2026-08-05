@@ -1,0 +1,29 @@
+name: functions-ci
+
+on:
+  pull_request:
+    paths:
+      - "functions/**"
+      - "packages/shared-types/**"
+  push:
+    branches: [main]
+    paths:
+      - "functions/**"
+      - "packages/shared-types/**"
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm install
+      - run: npm run build --workspace=packages/shared-types
+      - run: npm run build --workspace=functions
+      - run: npm run lint --workspace=functions
+      - run: npm run test --workspace=functions
+    # NOTE: no deploy step — deploy credentials/environment are an open
+    # decision, not wired up in this scaffold. See docs/SETUP.md.

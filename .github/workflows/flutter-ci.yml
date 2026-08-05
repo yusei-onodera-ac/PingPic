@@ -1,0 +1,33 @@
+name: flutter-ci
+
+on:
+  pull_request:
+    paths:
+      - "mobile/**"
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+      # NOTE: this repo does not check in generated ios/android platform
+      # folders (see mobile/README.md) — `flutter create .` regenerates
+      # them here just so `flutter analyze`/`flutter test` have a complete
+      # project to run against in CI. Real device/simulator builds are a
+      # separate, not-yet-configured job (would need macOS runners +
+      # signing for iOS).
+      - run: flutter create --org com.pingpic --project-name pingpic .
+      - run: flutter pub get
+      - run: flutter pub run build_runner build --delete-conflicting-outputs
+      - run: flutter analyze
+      - run: flutter test
