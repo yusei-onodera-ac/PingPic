@@ -20,21 +20,28 @@ flutter run -d <ios-simulator-id>
 
 ```
 lib/
-├── main.dart, app.dart, firebase_options.dart (placeholder)
-├── core/{theme, routing/app_router.dart, di/providers.dart}
+├── main.dart, app.dart, firebase_options.dart (placeholder — needs `flutterfire configure`)
+├── core/{theme, routing/app_router.dart (real auth-based redirect), di/providers.dart}
 ├── features/
-│   ├── camera/          # in-app-only capture — STUB
-│   ├── feed/             # STUB
+│   ├── camera/          # in-app-only capture — real (camera package + Storage/Firestore upload)
+│   ├── feed/             # real, but NOT group-scoped yet (see groups gap below)
 │   ├── prompts/data/     # DailySchedule model, mirrors shared-types
-│   ├── notifications/    # push + deep-link routing — STUB
-│   ├── auth/              # STUB — auth method not decided in design doc
-│   ├── suggestions/       # user-submitted prompt form — STUB
-│   └── widget_bridge/     # home_widget <-> WidgetKit data bridge — STUB
+│   ├── notifications/    # real (firebase_messaging + local notifications + tap deep-link)
+│   ├── auth/              # real, email/password (method itself is an open product decision)
+│   ├── suggestions/       # real (writes prompt_suggestions)
+│   └── widget_bridge/     # real (home_widget <-> WidgetKit data bridge)
 └── shared/models/         # Group, Post, PromptSuggestion — mirror shared-types
 ```
 
-Everything marked STUB throws `UnimplementedError` with a clear message — that's intentional for
-this scaffold pass; see [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) "stub vs real" split.
+Still genuinely stubbed/TODO despite the above being "real":
+- Image compression before upload (cost guardrail — see `CaptureController.capture`)
+- The actual `groupId` passed on post creation (`'TODO_GROUP_ID'` placeholder in
+  `camera_screen.dart` — blocked on the undefined `groups` collection, see
+  [docs/DATA_MODEL.md](../docs/DATA_MODEL.md))
+- Calling `HomeWidgetService.updateWidgetData` from the real app flow (service itself works, just
+  not wired to a call site yet)
+- The native WidgetKit SwiftUI view itself and its Xcode target (manual step, see
+  [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md))
 
 For the iOS home screen widget (WidgetKit extension, App Group setup), see
 [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md) — it's a manual Xcode step performed
