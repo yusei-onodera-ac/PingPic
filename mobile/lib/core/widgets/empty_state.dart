@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_text_styles.dart';
 
 /// Reusable icon + message (+ optional CTA) layout, used for every
-/// "nothing here yet" moment (no group, no schedule today, no
-/// suggestions pending, ...) so those states read as one consistent
-/// system instead of ad-hoc Text widgets scattered per screen.
+/// "nothing here yet" moment (no one followed yet, no schedule today, no
+/// public posts, ...) so those states read as one consistent system
+/// instead of ad-hoc Text widgets scattered per screen.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,

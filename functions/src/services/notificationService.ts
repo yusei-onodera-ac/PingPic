@@ -13,10 +13,9 @@ function getTasksClient(): CloudTasksClient {
  * mobile/lib/features/notifications/data/push_notification_service.dart).
  *
  * Design note: the design doc's prompt content is identical for every
- * user (not per-group) — so a single global topic broadcast is both the
- * simplest AND the cheapest option: one FCM send per slot (O(1)) instead
- * of looping per group or per device token. See docs/ARCHITECTURE.md
- * "Cost design".
+ * user — so a single global topic broadcast is both the simplest AND the
+ * cheapest option: one FCM send per slot (O(1)) instead of looping per
+ * device token. See docs/ARCHITECTURE.md "Cost design".
  */
 export const DAILY_PROMPTS_TOPIC = "daily_prompts";
 

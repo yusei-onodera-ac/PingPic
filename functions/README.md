@@ -27,7 +27,7 @@ src/
 │   ├── dailyBatchJob.ts           # 00:00 cron — implemented
 │   └── sendScheduledPrompt.ts     # HTTPS, invoked by Cloud Tasks — implemented
 ├── callable/
-│   └── groups.ts                  # createGroup / joinGroupByInviteCode / leaveGroup — implemented
+│   └── connections.ts              # respondToFriendRequest — implemented
 ├── triggers/
 │   └── likes.ts                   # onLikeCreated / onLikeDeleted — maintains Post.likeCount
 ├── services/
@@ -42,11 +42,11 @@ src/
 design" for why this is a trigger rather than a client-writable counter field (now that posts can
 be public, "who can increment likeCount" is a much bigger trust boundary than group-only ever was).
 
-`callable/groups.ts` is the invite-code based group create/join flow — a design decision made
-when implementing it (the design doc never specified one), documented in
-[docs/DATA_MODEL.md](../docs/DATA_MODEL.md) and `packages/shared-types/src/index.ts`'s `Group`
-doc comment. It's the reason `firestore.rules`' `posts` create/read rules could finally get a
-real `isGroupMember()` check instead of a placeholder TODO.
+`callable/connections.ts` handles ACCEPTING a friend request — the only step in PingPic's
+request/accept mutual-connection model (see [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
+"Resolved: groups → mutual connections") that needs server-side arbitration, since it atomically
+creates a `connections` doc and deletes the request. Sending/cancelling a request and unfriending
+are plain client writes instead — see `firestore.rules`.
 
 `dailyBatchJob` and its dependencies (`pickValidSendTime`, `promptPoolService`,
 `scheduleService`, `notificationService`, `sendScheduledPrompt`) are real logic, not stubs — see

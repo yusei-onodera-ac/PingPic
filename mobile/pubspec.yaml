@@ -1,6 +1,6 @@
 name: pingpic
 description: >
-  PingPic — 1日3回のお題通知に合わせて無加工写真を撮影・グループで共有するログアプリ。
+  PingPic — 1日3回のお題通知に合わせて無加工写真を撮影・友達と共有するログアプリ。
   iOS優先、Flutterによるクロスプラットフォーム実装。
 publish_to: "none"
 version: 0.0.1+1
@@ -20,8 +20,10 @@ dependencies:
   cloud_firestore: ^5.0.0
   firebase_storage: ^12.1.0
   firebase_messaging: ^15.0.0
-  cloud_functions: ^5.1.0 # createGroup / joinGroupByInviteCode callables
+  cloud_functions: ^5.1.0 # respondToFriendRequest callable
   flutter_image_compress: ^2.3.0 # upload size / Storage-egress cost guardrail
+  shared_preferences: ^2.3.0 # local-only settings (e.g. notification toggle persistence)
+  package_info_plus: ^8.0.0 # app version display on the settings screen
 
   # In-app-only camera. Deliberately NOT using image_picker's camera source —
   # that opens the native camera sheet (closer to "pick a photo") rather

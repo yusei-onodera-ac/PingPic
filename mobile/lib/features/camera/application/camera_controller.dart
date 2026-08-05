@@ -5,7 +5,6 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/di/providers.dart';
-import '../../groups/data/group_repository.dart';
 import '../../widget_bridge/home_widget_service.dart';
 import '../data/camera_repository.dart';
 import 'capture_state.dart';
@@ -27,13 +26,12 @@ final cameraRepositoryProvider = Provider<CameraRepository>((ref) {
 /// which is how "in-app camera only, no gallery import" is enforced at
 /// the OS permission layer. See pubspec.yaml and docs/DATA_MODEL.md.
 class CaptureController extends StateNotifier<CaptureState> {
-  CaptureController(this._repository, this._groupRepository, this._homeWidgetService)
+  CaptureController(this._repository, this._homeWidgetService)
       : super(const CaptureState.initializing()) {
     _init();
   }
 
   final CameraRepository _repository;
-  final GroupRepository _groupRepository;
   final HomeWidgetService _homeWidgetService;
   camera_pkg.CameraController? _controller;
   List<camera_pkg.CameraDescription> _cameras = [];
@@ -134,10 +132,6 @@ class CaptureController extends StateNotifier<CaptureState> {
     state = const CaptureState.ready();
   }
 
-  /// Resolves the caller's current group itself (rather than requiring it
-  /// as a param) so this works regardless of how CameraScreen was
-  /// reached — a notification tap only carries `slotNumber` in its deep
-  /// link, not a groupId, so the screen layer can't always supply one.
   Future<void> confirmAndUpload({
     required Uint8List photoBytes,
     required String date,
@@ -148,15 +142,8 @@ class CaptureController extends StateNotifier<CaptureState> {
   }) async {
     state = const CaptureState.uploading();
     try {
-      final groupId = await _groupRepository.currentGroupId();
-      if (_disposed) return;
-      if (groupId == null) {
-        state = const CaptureState.error('グループに参加してから投稿してください');
-        return;
-      }
       await _repository.uploadPost(
         photoBytes: photoBytes,
-        groupId: groupId,
         date: date,
         slotNumber: slotNumber,
         promptText: promptText,
@@ -184,7 +171,6 @@ final captureControllerProvider =
     StateNotifierProvider.autoDispose<CaptureController, CaptureState>((ref) {
   return CaptureController(
     ref.watch(cameraRepositoryProvider),
-    ref.watch(groupRepositoryProvider),
     ref.watch(homeWidgetServiceProvider),
   );
 });

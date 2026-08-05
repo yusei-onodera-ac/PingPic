@@ -9,9 +9,8 @@ rules_version = '2';
 // as `null` and every equality check fails closed).
 //
 // Cloud Functions (Admin SDK) bypass these rules entirely, so the 00:00
-// batch job's writes to daily_schedules/posts/prompt_suggestions, and
-// createGroup/joinGroupByInviteCode's writes to groups/invite_codes, are
-// not affected by anything below.
+// batch job's writes to daily_schedules/posts/prompt_suggestions are not
+// affected by anything below.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -23,9 +22,23 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
-    function isGroupMember(groupId) {
-      return request.auth.uid in
-        get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+    // Deterministic connections/{...} doc id for a pair of uids, order-
+    // independent — mirrors packages/shared-types/src/index.ts's
+    // connectionId() and mobile's ConnectionRepository. Keep all three
+    // in sync.
+    function connectionId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    function isConnected(a, b) {
+      return exists(/databases/$(database)/documents/connections/$(connectionId(a, b)));
+    }
+
+    // Can the requester see this uid's posts at all (their own, or as a
+    // mutual connection)? Individual posts additionally check isPublic —
+    // see posts.allow read below.
+    function canSeeUsersPosts(uid) {
+      return request.auth.uid == uid || isConnected(request.auth.uid, uid);
     }
 
     // --- daily_schedules/{date} ---
@@ -36,44 +49,59 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // --- groups/{groupId} ---
-    // { name, memberIds, inviteCode, createdBy, createdAt }. Mutated only
-    // via the createGroup / joinGroupByInviteCode Cloud Functions callables
-    // (Admin SDK) — never directly by clients, so invite-code uniqueness
-    // can be enforced with a server-side transaction. Members can list
-    // their own group via `where('memberIds', 'array-contains', uid)`,
-    // which this rule permits (Firestore evaluates list queries against
-    // this rule per matching document).
-    match /groups/{groupId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
-      allow write: if false;
+    // --- friend_requests/{fromUid}_{toUid} ---
+    // { fromUid, toUid, fromDisplayName, status: "pending", createdAt }
+    // Plain client writes — the constraint per doc is simple enough not
+    // to need a Cloud Function. Either the sender (cancel) or the
+    // recipient (reject) can delete a pending request; ACCEPTING one is
+    // NOT a delete-only operation (it also has to create a `connections`
+    // doc atomically), so that path goes through the
+    // respondToFriendRequest callable instead — see connections below.
+    match /friend_requests/{requestId} {
+      allow create: if isSignedIn()
+                    && request.resource.data.fromUid == request.auth.uid
+                    && request.resource.data.toUid != request.auth.uid
+                    && request.resource.data.status == 'pending';
+      allow read: if isSignedIn()
+                  && (request.auth.uid == resource.data.fromUid
+                      || request.auth.uid == resource.data.toUid);
+      allow delete: if isSignedIn()
+                    && (request.auth.uid == resource.data.fromUid
+                        || request.auth.uid == resource.data.toUid);
+      allow update: if false;
     }
 
-    // --- invite_codes/{code} ---
-    // { groupId } — lookup-only doc used by joinGroupByInviteCode.
-    // Never read or written by clients directly (the callable does the
-    // lookup with the Admin SDK) — if it were client-readable, anyone
-    // could enumerate/guess codes without going through the join flow's
-    // validation.
-    match /invite_codes/{code} {
-      allow read, write: if false;
+    // --- connections/{sortedUidA}_{sortedUidB} ---
+    // { uids: [sortedUidA, sortedUidB], displayNames: {uid: name}, createdAt }
+    // Created ONLY by the respondToFriendRequest Cloud Function callable
+    // (Admin SDK) — never a direct client create, since accepting a
+    // request needs to atomically also delete the request doc, which a
+    // plain rules-only client write can't coordinate. Deleting one
+    // ("unfriend") needs no such coordination, so that IS a plain client
+    // write, by either party.
+    match /connections/{connectionId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.uids;
+      allow create: if false;
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.uids;
+      allow update: if false;
     }
 
     // --- posts/{postId} ---
-    // { groupId, userId, date, slotNumber, photoUrl, postedAt, isPublic,
-    //   caption, likeCount }
+    // { userId, authorDisplayName, date, slotNumber, photoUrl, postedAt,
+    //   promptText, isPublic, caption, likeCount }
     match /posts/{postId} {
       allow create: if isSignedIn()
                     && request.resource.data.userId == request.auth.uid
-                    && isGroupMember(request.resource.data.groupId)
                     // likeCount must start at 0 — only the likes trigger
                     // (Admin SDK) ever changes it after creation.
                     && request.resource.data.likeCount == 0;
-      // Visible to your group always; visible to ANYONE signed in if the
-      // author chose to make it public (the "みんなの投稿" feed) — see
-      // Post.isPublic's doc comment in shared-types.
+      // Visible to the author and their mutual connections always (this
+      // is what used to be "your group can see it"); visible to ANYONE
+      // signed in if the author additionally chose to make it public
+      // (the "みんなの投稿" feed) — see Post.isPublic's doc comment in
+      // shared-types.
       allow read: if isSignedIn()
-                  && (resource.data.isPublic == true || isGroupMember(resource.data.groupId));
+                  && (resource.data.isPublic == true || canSeeUsersPosts(resource.data.userId));
       // Authors don't edit/delete posts per spec (no editing feature).
       // likeCount is the one field non-admins never touch directly either
       // — see posts/{postId}/likes/{uid} below, which drives it via a
@@ -89,7 +117,7 @@ service cloud.firestore {
       match /likes/{uid} {
         allow read: if isSignedIn()
                     && (get(/databases/$(database)/documents/posts/$(postId)).data.isPublic == true
-                        || isGroupMember(get(/databases/$(database)/documents/posts/$(postId)).data.groupId));
+                        || canSeeUsersPosts(get(/databases/$(database)/documents/posts/$(postId)).data.userId));
         allow create, delete: if isSignedIn() && request.auth.uid == uid;
         allow update: if false; // no fields to update — recreate instead
       }
@@ -99,7 +127,7 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if isSignedIn()
                     && (get(/databases/$(database)/documents/posts/$(postId)).data.isPublic == true
-                        || isGroupMember(get(/databases/$(database)/documents/posts/$(postId)).data.groupId));
+                        || canSeeUsersPosts(get(/databases/$(database)/documents/posts/$(postId)).data.userId));
         allow create: if isSignedIn()
                       && request.resource.data.userId == request.auth.uid
                       && request.resource.data.text is string

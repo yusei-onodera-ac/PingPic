@@ -4,8 +4,9 @@ import '../../features/suggestions/data/suggestion_repository.dart';
 import '../../features/notifications/data/push_notification_service.dart';
 import '../../features/widget_bridge/home_widget_service.dart';
 import '../../features/feed/data/feed_repository.dart';
-import '../../features/groups/data/group_repository.dart';
+import '../../features/connections/data/connection_repository.dart';
 import '../../features/public_feed/data/public_feed_repository.dart';
+import '../../features/settings/data/settings_repository.dart';
 
 /// Root DI wiring. Feature-local providers (e.g. cameraRepositoryProvider
 /// in features/camera/application/camera_controller.dart) live next to
@@ -32,10 +33,14 @@ final feedRepositoryProvider = Provider<FeedRepository>((ref) {
   return FeedRepositoryImpl();
 });
 
-final groupRepositoryProvider = Provider<GroupRepository>((ref) {
-  return GroupRepositoryImpl();
+final connectionRepositoryProvider = Provider<ConnectionRepository>((ref) {
+  return ConnectionRepositoryImpl();
 });
 
 final publicFeedRepositoryProvider = Provider<PublicFeedRepository>((ref) {
   return PublicFeedRepositoryImpl();
+});
+
+final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
+  return SettingsRepositoryImpl();
 });

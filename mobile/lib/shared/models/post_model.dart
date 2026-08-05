@@ -10,7 +10,6 @@ part 'post_model.g.dart';
 class PostModel with _$PostModel {
   const factory PostModel({
     required String id,
-    required String groupId,
     required String userId,
     /// Denormalized at post time — no separate user-profile collection
     /// exists in this app (yet). See the field's doc comment in
@@ -26,9 +25,9 @@ class PostModel with _$PostModel {
     /// field's doc comment in shared-types for why (avoids an extra
     /// daily_schedules read per post in the public feed).
     required String promptText,
-    /// Chosen once at capture time — see CapturedPreviewView. A public
-    /// post is visible to anyone via the "みんなの投稿" feed, not just
-    /// this post's group.
+    /// Chosen once at capture time — see CapturedPreviewView. Mutual
+    /// connections can always see this post regardless; this flag
+    /// additionally surfaces it in the "みんなの投稿" feed to everyone.
     required bool isPublic,
     required String caption,
     /// Maintained server-side by functions/src/triggers/likes.ts —

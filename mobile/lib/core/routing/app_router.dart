@@ -5,8 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../features/camera/presentation/camera_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/suggestions/presentation/suggestion_form_screen.dart';
-import '../../features/groups/presentation/group_setup_screen.dart';
 import '../../features/public_feed/presentation/post_detail_screen.dart';
+import '../../features/connections/presentation/profile_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/incoming_requests_screen.dart';
+import '../../features/settings/presentation/connections_list_screen.dart';
 import '../di/providers.dart';
 import '../widgets/home_shell.dart';
 
@@ -15,13 +18,15 @@ import '../widgets/home_shell.dart';
 /// push_notification_service.dart and docs/IOS_WIDGET_SETUP.md.
 abstract class AppRoutes {
   static const login = '/login';
-  /// HomeShell — the two-tab (グループ/みんな) bottom-nav shell, not a
-  /// single screen anymore since the public feed was added.
+  /// HomeShell — the two-tab (フォロー中/みんな) bottom-nav shell.
   static const feed = '/';
   static const camera = '/camera';
   static const suggest = '/suggest';
-  static const groupSetup = '/group-setup';
   static const publicPostDetail = '/public-post';
+  static const profile = '/profile';
+  static const settings = '/settings';
+  static const incomingRequests = '/settings/requests';
+  static const connectionsList = '/settings/connections';
 }
 
 /// Bridges a Stream (authRepository.authStateChanges()) to the Listenable
@@ -49,12 +54,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.feed,
     refreshListenable: GoRouterRefreshStream(authRepository.authStateChanges()),
-    // Only auth state gates routes here — group membership deliberately
-    // does NOT (that would need an async Firestore read inside redirect,
-    // which is possible with go_router but adds real complexity for a
-    // single soft gate). Instead FeedScreen itself shows a "join a group"
-    // prompt when GroupRepository.watchMyGroup() is null, linking to
-    // AppRoutes.groupSetup.
     redirect: (context, state) {
       final signedIn = authRepository.currentUserId != null;
       final goingToLogin = state.matchedLocation == AppRoutes.login;
@@ -72,10 +71,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const HomeShell(),
       ),
       GoRoute(
-        path: AppRoutes.groupSetup,
-        builder: (context, state) => const GroupSetupScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.camera,
         builder: (context, state) {
           final slotParam = state.uri.queryParameters['slot'];
@@ -90,6 +85,25 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '${AppRoutes.publicPostDetail}/:postId',
         builder: (context, state) =>
             PostDetailScreen(postId: state.pathParameters['postId']!),
+      ),
+      GoRoute(
+        path: '${AppRoutes.profile}/:uid',
+        builder: (context, state) => ProfileScreen(
+          uid: state.pathParameters['uid']!,
+          displayName: state.uri.queryParameters['name'] ?? '匿名ユーザー',
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.settings,
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.incomingRequests,
+        builder: (context, state) => const IncomingRequestsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.connectionsList,
+        builder: (context, state) => const ConnectionsListScreen(),
       ),
     ],
   );

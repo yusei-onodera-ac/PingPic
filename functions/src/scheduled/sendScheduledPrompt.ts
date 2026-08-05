@@ -31,8 +31,8 @@ function isValidBody(body: unknown): body is SendScheduledPromptBody {
  * Cloud Functions Invoker role (see docs/SETUP.md) or every call 403s.
  *
  * Sends one FCM message to the single global DAILY_PROMPTS_TOPIC — see
- * notificationService.ts for why a global topic (not per-group/per-user)
- * is the deliberate, cost-minimal choice here.
+ * notificationService.ts for why a global topic (not per-user) is the
+ * deliberate, cost-minimal choice here.
  */
 export const sendScheduledPrompt = onRequest(
   { region: FUNCTIONS_REGION, memory: "128MiB", timeoutSeconds: 30 },

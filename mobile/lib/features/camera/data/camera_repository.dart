@@ -13,7 +13,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 abstract class CameraRepository {
   Future<String> uploadPost({
     required Uint8List photoBytes,
-    required String groupId,
     required String date, // "YYYY-MM-DD"
     required int slotNumber,
     required String promptText,
@@ -38,7 +37,6 @@ class CameraRepositoryImpl implements CameraRepository {
   @override
   Future<String> uploadPost({
     required Uint8List photoBytes,
-    required String groupId,
     required String date,
     required int slotNumber,
     required String promptText,
@@ -61,10 +59,7 @@ class CameraRepositoryImpl implements CameraRepository {
     }
 
     final postRef = _firestore.collection('posts').doc();
-    // Path includes groupId (not just uid) so storage.rules can check
-    // group membership without needing custom object metadata — see that
-    // file's isGroupMember().
-    final storageRef = _storage.ref('posts/$groupId/$uid/${postRef.id}.jpg');
+    final storageRef = _storage.ref('posts/$uid/${postRef.id}.jpg');
 
     await storageRef.putData(photoBytes, SettableMetadata(contentType: 'image/jpeg'));
     final photoUrl = await storageRef.getDownloadURL();
@@ -76,7 +71,6 @@ class CameraRepositoryImpl implements CameraRepository {
     // the one field non-admins never write directly after creation (see
     // functions/src/triggers/likes.ts).
     await postRef.set({
-      'groupId': groupId,
       'userId': uid,
       'authorDisplayName': user.displayName ?? user.email ?? '匿名ユーザー',
       'date': date,

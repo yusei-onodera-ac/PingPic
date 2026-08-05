@@ -11,8 +11,8 @@ import '../../widget_bridge/home_widget_service.dart';
 /// FCM topic every device subscribes to for daily prompt pushes — must
 /// match DAILY_PROMPTS_TOPIC in
 /// functions/src/services/notificationService.ts exactly. A single
-/// global topic (not per-group/per-user) is the deliberate cost-minimal
-/// choice described there: prompt content is identical for every user.
+/// global topic (not per-user) is the deliberate cost-minimal choice
+/// described there: prompt content is identical for every user.
 const _dailyPromptsTopic = 'daily_prompts';
 
 /// Must match the constants in

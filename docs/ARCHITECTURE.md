@@ -28,12 +28,16 @@ scaffold.
    unset slot from `prompt_pool` (respecting the ≥4h gap / 07:00–22:00 window), and schedules the
    day's 3 push notifications.
 3. At each scheduled time, a push goes out; tapping it deep-links the Flutter app straight to the
-   camera screen (`go_router`).
-4. The user shoots a photo with the in-app-only camera and it's written to `posts/{postId}` +
-   Storage under `posts/{groupId}/{uid}/...` (groupId is in the path so `storage.rules` can check
-   group membership without custom object metadata).
-5. The iOS home screen widget (WidgetKit) reads the latest prompt + group post status from a
-   shared App Group container that the Flutter app keeps updated via the `home_widget` package.
+   camera screen (`go_router`), which also shows the slot's prompt text and (slot 3) a countdown
+   to 24:00 JST overlaid on the live preview.
+4. The user shoots a photo with the in-app-only camera, chooses public/private (+ an optional
+   caption if public), and it's written to `posts/{postId}` + Storage under `posts/{uid}/...`.
+5. Mutual connections (see "Resolved: groups → mutual connections" below) see the post in their
+   following feed regardless of the public/private choice; a public post is additionally visible
+   to everyone via "みんなの投稿".
+6. The iOS home screen widget (WidgetKit) reads the latest prompt + this device's post status from
+   a shared App Group container that the Flutter app keeps updated via the `home_widget` package
+   (including from a background isolate when a prompt arrives while the app is fully terminated).
 
 ## Cost design (running-cost-conscious choices)
 
@@ -42,16 +46,17 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
 
 - **Batch job frequency**: `dailyBatchJob` runs once a day (00:00 JST). This is the only
   *scheduled* (cron) function — no per-user or per-slot cron jobs.
-- **Push delivery pattern**: prompt content is identical for every user (the design doc has one
-  global prompt per slot, not per-group). So the batch job publishes to a **single global FCM
-  topic** (`daily_prompts`, see `functions/src/services/notificationService.ts`) — O(1) sends per
-  slot, cheaper than even a per-group loop. Exact send-time delivery (times are
-  admin-configurable per day, not fixed crons) is done via **Cloud Tasks**: `dailyBatchJob`
-  schedules 3 tasks/day targeting the `sendScheduledPrompt` HTTPS function, which fires the
-  actual FCM send at each slot's exact time. Both Cloud Tasks and the extra HTTPS invocations sit
-  comfortably inside free-tier allowances at 3 tasks/day.
+- **Push delivery pattern**: prompt content is identical for every user. So the batch job
+  publishes to a **single global FCM topic** (`daily_prompts`, see
+  `functions/src/services/notificationService.ts`) — O(1) sends per slot. Exact send-time
+  delivery (times are admin-configurable per day, not fixed crons) is done via **Cloud Tasks**:
+  `dailyBatchJob` schedules 3 tasks/day targeting the `sendScheduledPrompt` HTTPS function, which
+  fires the actual FCM send at each slot's exact time. Both Cloud Tasks and the extra HTTPS
+  invocations sit comfortably inside free-tier allowances at 3 tasks/day.
 - **Firestore reads/writes**: avoid fan-out writes (e.g. don't write a "notified" doc per user per
-  slot). Prefer topic messaging + client-side read state where possible.
+  slot). Prefer topic messaging + client-side read state where possible. The following feed's "one
+  query per connection" approach (see below) is a deliberate exception to this, scoped to friend-
+  list sizes where it's still cheap.
 - **Storage egress**: photo uploads are the dominant cost driver at scale. `CaptureController`
   (`mobile/lib/features/camera/application/camera_controller.dart`) compresses to ~1600px /
   quality 80 before ever holding the bytes in state; `storage.rules` caps upload size at 8MB as a
@@ -61,36 +66,93 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
   always-on container for what's a low-traffic internal tool. `firebase.json` deliberately does
   **not** wire Hosting rewrites for it — this is a documented open decision, not a blocker.
 - **Firestore composite indexes**: declared only for queries that actually exist and need one
-  (the public feed's two sort orders, the admin panel's pending-suggestions queue) — see
-  `firestore.indexes.json` and [DATA_MODEL.md](./DATA_MODEL.md) "Composite indexes". Multi-field
-  equality-only queries (e.g. `watchGroupPosts`'s `groupId + date`) deliberately don't get one —
-  Firestore serves those from automatic single-field indexes already.
+  (the public feed's two sort orders, ProfileScreen's per-user public-post grid, the admin panel's
+  pending-suggestions queue) — see `firestore.indexes.json` and [DATA_MODEL.md](./DATA_MODEL.md)
+  "Composite indexes". Multi-field equality-only queries (e.g. the following feed's
+  `userId + date`) deliberately don't get one — Firestore serves those from automatic single-field
+  indexes already.
 - **Likes via a trigger, not a client counter**: `posts/{postId}/likes/{uid}` create/delete fires
   a Firestore trigger (`functions/src/triggers/likes.ts`) that increments/decrements
   `Post.likeCount` server-side, rather than loosening `posts`' write rule to let any signed-in
   user (now potentially the whole user base, via public posts) touch the post document directly.
   Trigger invocations are bounded by actual like-button presses, not a scheduled cost driver.
+- **Accepting a connection via a callable, not a wider write rule**: same reasoning as likes —
+  `respondToFriendRequest` (Admin SDK) is the only way a `connections` doc is ever created, so
+  `firestore.rules` doesn't need to reason about arbitrary cross-user writes.
 
 ## Known open gaps
 
 - **Hosting choice for `admin-panel`**: Vercel vs. Firebase Hosting is left open; see above.
-- **No multi-group support**: the invite-code flow (below) is intentionally an MVP
-  simplification — one group per user (there is a "leave group" flow, see below, but no way to
-  belong to more than one at a time).
+- **Only a flat mutual-or-not relationship**: no "close friends" tiers, no blocking, no limit on
+  connection count. See "Resolved: groups → mutual connections" below for what IS built.
 - **Image compression tuning**: `CaptureController.capture()` compresses to ~1600px/quality 80
   before upload, but those numbers are a starting guess, not tuned against real device photos.
+- **Following feed doesn't paginate**: `watchUserPosts` issues one Firestore listener per
+  connection with no upper bound — fine at friend-following scale, would need batching/pagination
+  for someone with hundreds of connections. See its doc comment in
+  `mobile/lib/features/feed/data/feed_repository.dart`.
 
-### Resolved: `groups` collection (was previously unconfirmed)
+### Resolved: groups → mutual connections (two pivots this session)
 
-The design doc never defined how groups are created or joined. Decision made when implementing
-this: **invite-code based create/join**, one group per user for this MVP. `createGroup` and
-`joinGroupByInviteCode` (`functions/src/callable/groups.ts`) are the only way `groups` and
-`invite_codes` get written — never direct client writes — so invite-code uniqueness is enforced
-with a server-side Firestore transaction, and `firestore.rules` stays simple (members can read
-their own group; everything else is `allow write: if false`). This also finally let
-`posts` and Storage's `storage.rules` enforce real group-membership checks instead of the
-placeholder TODOs from earlier passes. A `leaveGroup` callable exists too (same file) — if the
-last member leaves, it deletes the group and its invite code rather than leaving them orphaned.
+This went through three shapes before landing here:
+
+1. **Group membership** (original scaffold) — invite-code create/join, one group per user,
+   `posts.groupId` scoped visibility to the group.
+2. **One-directional follow** (briefly) — Twitter-style, no approval step.
+3. **Mutual connection via request + accept** (current) — closer to a friend request. Sending or
+   cancelling a `friend_requests/{fromUid}_{toUid}` doc is a plain client write (rules-enforced);
+   **accepting** one is not, since it has to atomically create a `connections/{sortedPair}` doc
+   AND delete the request — that's `respondToFriendRequest`
+   (`functions/src/callable/connections.ts`), the one place in this relationship model that needs
+   server-side arbitration. Unfriending (deleting a `connections` doc) is a plain client write by
+   either party, no approval needed for that direction.
+
+A mutual connection sees ALL of the other person's posts regardless of `Post.isPublic` — this is
+what group membership used to grant. `isPublic` now only controls whether a post ALSO surfaces to
+people you're not connected to, via "みんなの投稿". See [DATA_MODEL.md](./DATA_MODEL.md) for the
+full schema and the `posts`/Storage rules for how both checks compose.
+
+`connectionId(a, b)` (sorted-pair doc id) is implemented identically in three places that must
+stay in sync: `packages/shared-types/src/index.ts`, `firestore.rules`/`storage.rules`, and
+mobile's `ConnectionRepository`.
+
+### Resolved: TikTok-style following feed
+
+`mobile`'s first tab ("フォロー中") is a full-screen vertical `PageView` — one page per
+connection, swipe up/down to move between people. Within a page, a second horizontal `PageView`
+holds that person's 3 daily slots, Instagram-carousel style; a slot nobody's posted to yet shows
+`PulsingPlaceholder` (a soft opacity-pulse placeholder — PingPic's own interpretation of "waiting
+for a photo", not a pixel-for-pixel reproduction of any specific app's animation) instead of a
+photo. The prompt text and (slot 3) a countdown are overlaid at the bottom, same visual language
+as the camera screen's top bar.
+
+Cost note: this issues one `watchUserPosts(uid, date)` Firestore listener per connection (see the
+cost-design section above) — acceptable at friend-following scale, flagged as a real limit in
+"Known open gaps" for larger connection counts.
+
+### Resolved: profile screens
+
+Reachable by tapping an avatar/name anywhere one appears (PostCard, the following feed's
+overlay). Shows the person's display name, a `ConnectionButton` (see below) if it's not your own
+profile, and a grid of their **public** posts only ("下に公開とした投稿が表示" per this session's
+requirement) — even once connected, this screen doesn't also surface their private posts; the
+following feed is what's for those. `displayName` is passed through navigation (query param) from
+wherever the tap originated rather than looked up from a user-profile collection, which doesn't
+exist in this app.
+
+`ConnectionButton` (`features/connections/presentation/widgets/`) is a 4-state widget — none (send
+request) / outgoing pending (cancel) / incoming pending (accept) / connected (remove) — built by
+nesting 3 single-document `StreamBuilder`s rather than pulling in a stream-combining dependency
+for what's only ever 3 listeners.
+
+### Resolved: settings screen
+
+`mobile`'s settings screen (gear icon on the "みんな" tab's app bar) covers: account email +
+sign-out, a notification on/off toggle (persisted via `shared_preferences` — FCM has no client API
+to query "am I subscribed to topic X", so this is the local source of truth, kept in sync with
+actual `subscribeToDailyPrompts`/`unsubscribeFromDailyPrompts` calls), a friend-requests inbox
+(accept/reject, badge-counted), a connections list (view/unfriend), a link to the existing prompt-
+suggestion form, and the app version (`package_info_plus`).
 
 ### Resolved: admin auth (session cookies + server-side verification)
 
@@ -119,35 +181,27 @@ with no access to app state, so it re-initializes Firebase and talks to the `hom
 directly rather than through `HomeWidgetServiceImpl`. This is what makes the widget update even
 when a prompt arrives with the app fully killed, not just backgrounded.
 
-### Resolved: group feed UI
-
-`mobile`'s FeedScreen now shows a real group feed, not just the signed-in user's own status:
-each slot's photos (yours and groupmates') only become visible once you've posted your own for
-that slot, per the design doc's retention mechanic. Deliberately shows nothing at all (not even
-a blurred thumbnail) before that — a blurred `<img>` still means the bytes were fetched, so
-"count of who's posted, no images" is the honest way to keep that boundary. See
-`mobile/lib/features/feed/presentation/feed_screen.dart`.
-
 ### Resolved: public posts / みんなの投稿 (like/comment system)
 
-Design decision (not in the original spec, added mid-session): at capture time, the poster can
-make an individual photo public — visible to any signed-in user via a new "みんなの投稿" tab, not
-just their group — with an optional one-line caption, likes, and comments. Deliberately a
-capture-time choice, not toggleable afterward (no editing flow anywhere else in the app either).
+Design decision (not in the original spec): at capture time, the poster can make an individual
+photo public — visible to any signed-in user via a "みんなの投稿" tab, with an optional one-line
+caption, likes, and comments. Deliberately a capture-time choice, not toggleable afterward (no
+editing flow anywhere else in the app either).
 
-- `mobile`'s root screen is now `HomeShell` (`core/widgets/home_shell.dart`), a two-tab
-  `NavigationBar` shell (グループ / みんな) — `AppRoutes.feed` ("/") builds this instead of
-  `FeedScreen` directly now.
-- The public feed (`features/public_feed/`) is a flat, group-independent stream of every public
-  post — deliberately mixing posts from different prompts/dates/groups together rather than
-  grouping by prompt. Each card denormalizes and shows its own `promptText` (so a mixed feed still
-  makes sense per-card) and defaults to most-liked-first (`PublicFeedSort.mostLiked`), with a
-  toggle to newest-first — see `PublicFeedRepository.watchPublicPosts`.
-- Card design deliberately follows Instagram's post-card convention (avatar+name header, full-
-  width photo, like/comment icon row, caption, "view comments" link) since that's a well-
-  understood pattern for exactly this kind of public social feed — see `widgets/post_card.dart`.
-- Likes: see the cost-design note above on why a Cloud Functions trigger drives `likeCount`
-  rather than a client-writable counter.
+- `mobile`'s root screen is `HomeShell` (`core/widgets/home_shell.dart`), a two-tab
+  `NavigationBar` shell (フォロー中 / みんな) — `AppRoutes.feed` ("/") builds this instead of a
+  single feed screen.
+- The public feed (`features/public_feed/`) is a flat stream of every public post, deliberately
+  mixing posts from different prompts/dates/users together rather than grouping by prompt. Each
+  card denormalizes and shows its own `promptText` (so a mixed feed still makes sense per-card)
+  and defaults to most-liked-first (`PublicFeedSort.mostLiked`), with a toggle to newest-first —
+  see `PublicFeedRepository.watchPublicPosts`.
+- Card design follows Instagram's post-card convention (avatar+name header — tap to open their
+  profile — full-width photo with the prompt as a corner badge, like/comment icon row, caption,
+  "view comments" link) since that's a well-understood pattern for exactly this kind of public
+  social feed — see `widgets/post_card.dart`.
+- Likes: see the cost-design note above on why a Cloud Functions trigger drives `likeCount` rather
+  than a client-writable counter.
 - Comments: a straightforward `posts/{postId}/comments` subcollection, no edit/delete-by-author
   (same "no editing" posture as posts themselves), 1–280 chars enforced in `firestore.rules`.
 - `authorDisplayName` and `promptText` are both denormalized onto `Post` at write time — there's
@@ -156,13 +210,12 @@ capture-time choice, not toggleable afterward (no editing flow anywhere else in 
 
 ## UI design system (mobile)
 
-Introduced mid-session alongside a broader visual pass — see `mobile/lib/core/theme/`:
-`app_colors.dart` (a small hand-picked palette: warm coral primary, muted teal-green for
-"posted"/success states, near-black/warm-cream surfaces — not a BeReal clone, but takes cues from
-it and from Instagram's social-feed conventions per this session's direction) and
-`app_text_styles.dart` (a hand-tuned type scale using system fonts — no `google_fonts` dependency,
-since every string in this app is Japanese and a Latin-only display font wouldn't affect any of
-the copy that actually needs it). `core/widgets/` holds cross-screen pieces built alongside this
-pass: `CountdownText` (also what finally implements the design doc's slot-3
-"当日24:00まで(カウントダウン表示)" requirement, which earlier passes had missed), `EmptyState`,
-`StatusPill`.
+See `mobile/lib/core/theme/`: `app_colors.dart` (a small hand-picked palette: warm coral primary,
+muted teal-green for "posted"/success states, near-black/warm-cream surfaces — not a BeReal clone,
+but takes cues from it and from TikTok/Instagram's social-feed conventions per this session's
+direction) and `app_text_styles.dart` (a hand-tuned type scale using system fonts — no
+`google_fonts` dependency, since every string in this app is Japanese and a Latin-only display
+font wouldn't affect any of the copy that actually needs it). `core/widgets/` holds cross-screen
+pieces: `CountdownText` (also what implements the design doc's slot-3 "当日24:00まで(カウントダウン
+表示)" requirement, missed in earlier passes), `EmptyState`, `StatusPill`, `PulsingPlaceholder`,
+`HomeShell`.

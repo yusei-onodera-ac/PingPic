@@ -23,46 +23,54 @@ Doc id: `YYYY-MM-DD`.
 | promptText  | `string`                                                                | |
 | credit      | `{ type: "admin" }` \| `{ type: "user"; uid: string; displayName: string }` | shown as "○○さん考案" / "運営考案" |
 
-## `groups/{groupId}` — ⚠️ inferred, not in the original design doc
+## `friend_requests/{fromUid}_{toUid}` — ⚠️ inferred, not in the original design doc
 
-| field      | type                    | notes |
-|------------|--------------------------|-------|
-| name       | `string`                 | |
-| memberIds  | `string[]`               | Firebase Auth uids |
-| inviteCode | `string`                 | 6-char code, see below |
-| createdBy  | `string`                 | uid of the creator |
-| createdAt  | Firestore `Timestamp`    | |
+| field           | type                    | notes |
+|-----------------|--------------------------|-------|
+| fromUid         | `string`                 | |
+| toUid           | `string`                 | |
+| fromDisplayName | `string`                 | denormalized, so the recipient's request inbox can show a name |
+| status          | `"pending"`               | only ever "pending" while the doc exists — see below |
+| createdAt       | Firestore `Timestamp`    | |
 
-**Design decision (not in the original spec)**: invite-code based create/join, one group per
-user for this MVP — see `functions/src/callable/groups.ts`. Mutated only through the
-`createGroup` / `joinGroupByInviteCode` callables (Admin SDK), never by direct client writes, so
-invite-code uniqueness can be enforced with a server-side transaction and `firestore.rules` stays
-a flat "members can read, nobody writes directly" rule. Clients list their own group via
-`where('memberIds', 'array-contains', uid)`.
+**Design decision (not in the original spec)** — the third relationship model this session
+landed on, after group membership and then a one-directional follow graph: a **mutual**
+connection gated by request + accept, closer to a friend request than a Twitter-style follow.
+Sending/cancelling a request is a plain client write (rules-enforced, doc id `{fromUid}_{toUid}`
+prevents duplicate pending requests in the same direction). **Accepting** one is not — it also has
+to atomically create the `connections` doc below and delete the request, which a rules-only
+client write can't coordinate — see `respondToFriendRequest`
+(`functions/src/callable/connections.ts`). Rejecting is just a delete, done directly by the
+recipient. Accepted/rejected requests aren't kept around with a terminal status; the doc is simply
+gone once resolved.
 
-Still open: no support for a user belonging to more than one group (there is a `leaveGroup`
-callable and a matching FeedScreen UI action, just no way to be in two groups at once).
+## `connections/{sortedUidA}_{sortedUidB}`
 
-## `invite_codes/{code}` — lookup table for joining
+| field        | type                              | notes |
+|--------------|-------------------------------------|-------|
+| uids         | `[string, string]`                  | the two uids, sorted ascending — matches the doc id |
+| displayNames | `Record<string, string>`             | keyed by uid, so either party can show the other's name |
+| createdAt    | Firestore `Timestamp`               | |
 
-| field   | type     | notes |
-|---------|----------|-------|
-| groupId | `string` | |
+One doc per pair (not two mirrored per-user subcollection docs) since the relationship is
+symmetric — a single `exists()` check from either side, no risk of mirrors drifting. Doc id is
+deterministic (`connectionId()` in shared-types, mirrored in `firestore.rules` and mobile's
+`ConnectionRepository`) so both sides always compute the same path. **Only** created by
+`respondToFriendRequest` (`allow create: if false` in `firestore.rules`); deleting one
+("unfriend") is a plain client write by either party.
 
-Doc id is the invite code itself. Never read or written by clients directly — only
-`joinGroupByInviteCode` touches it, via the Admin SDK. If it were client-readable, codes could be
-enumerated without going through that function's validation.
+Still open: no support for anything beyond a flat mutual-or-not relationship (no "close friends"
+tiers, no blocking).
 
 ## `posts/{postId}`
 
 | field             | type                     | notes |
 |-------------------|--------------------------|-------|
-| groupId           | `string`                 | → `groups/{groupId}` |
 | userId            | `string`                 | Firebase Auth uid |
 | authorDisplayName | `string`                 | denormalized at post time — no separate user-profile collection exists |
 | date              | `string` (`YYYY-MM-DD`)  | |
 | slotNumber        | `1 \| 2 \| 3`            | |
-| photoUrl          | `string`                 | Storage download URL, `posts/{groupId}/{uid}/...` |
+| photoUrl          | `string`                 | Storage download URL, `posts/{uid}/...` |
 | postedAt          | Firestore `Timestamp`    | |
 | promptText        | `string`                 | denormalized copy of the slot's prompt at post time |
 | isPublic          | `boolean`                | chosen once at capture time, never toggled after — see below |
@@ -72,11 +80,11 @@ enumerated without going through that function's validation.
 No edit/delete-by-owner path — the spec has no photo-editing feature, so `posts` are
 effectively append-only from the client's perspective (rules only allow admin update/delete).
 
-**Design decision (not in the original spec)**: at capture time, the poster can choose to make a
-photo public. A public post becomes visible to any signed-in user via the "みんなの投稿" feed —
-not just the poster's group — and can carry a caption, likes, and comments. This is deliberately
-NOT toggleable after posting (no editing flow, consistent with the rest of the app). Private
-(the default) posts behave exactly as before: group-only, no caption/like/comment UI shown.
+**Privacy model**: a mutual connection can always see all of a user's posts, regardless of
+`isPublic` (this is what group membership used to grant). `isPublic: true` additionally surfaces
+the post to any signed-in user via the "みんなの投稿" feed and lets it carry a caption/likes/
+comments in that wider context. Chosen once at capture time, not toggleable after (no editing
+flow anywhere else in the app either).
 
 ### `posts/{postId}/likes/{uid}`
 
@@ -127,7 +135,10 @@ Used only by `dailyBatchJob` (via Admin SDK, bypasses rules) and the admin panel
 Declared in `firestore.indexes.json`:
 - `posts`: `isPublic ASC, postedAt DESC` — the "みんなの投稿" feed's newest-first sort.
 - `posts`: `isPublic ASC, likeCount DESC` — that feed's default most-liked-first sort.
+- `posts`: `userId ASC, isPublic ASC, postedAt DESC` — ProfileScreen's "公開した投稿" grid.
 - `prompt_suggestions`: `status ASC, createdAt ASC` — the admin panel's pending-suggestions queue.
 
-`groupId + date` (two pure equality filters, used by `watchGroupPosts`) does NOT need one —
-Firestore serves multi-field equality-only queries from its automatic single-field indexes.
+`userId + date` (two pure equality filters, used by `watchUserPosts` for the following feed) does
+NOT need one — Firestore serves multi-field equality-only queries from its automatic single-field
+indexes. `friend_requests`' `toUid + status` query (incoming requests) is similarly two equality
+filters only, no composite index needed either.

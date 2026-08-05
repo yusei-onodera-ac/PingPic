@@ -6,15 +6,18 @@ abstract class FeedRepository {
   /// Emits null if today's daily_schedules doc doesn't exist yet.
   Stream<DailyScheduleModel?> watchTodaySchedule(String dateId);
 
-  /// Every post any member of the group made on this date, across all 3
-  /// slots — the client derives "have I posted for slot N" and "who else
-  /// has" from this single stream rather than issuing a second query, to
-  /// keep this to one Firestore listener per feed view (see
-  /// docs/ARCHITECTURE.md "Cost design"). Two equality filters
-  /// (groupId + date) don't need a composite index — Firestore serves
-  /// pure-equality compound queries from the automatic single-field
-  /// indexes.
-  Stream<List<PostModel>> watchGroupPosts(String groupId, String dateId);
+  /// A single followed user's posts for one date (0-3 of them, one per
+  /// slot) — the following feed (features/feed/presentation/) calls this
+  /// once per followed uid to build that user's swipeable photo set.
+  ///
+  /// Cost/scale note: this is N separate single-user listeners (one per
+  /// followed uid), not one batched query — Firestore's `where(field,
+  /// 'in', [...])` could combine these into fewer round trips for larger
+  /// following lists, but two plain equality filters (userId + date) are
+  /// simpler to reason about and don't need a composite index, unlike an
+  /// `in` + `==` compound query. Fine at friend-following scale; revisit
+  /// with pagination/batching if a user follows hundreds of people.
+  Stream<List<PostModel>> watchUserPosts(String uid, String dateId);
 }
 
 class FeedRepositoryImpl implements FeedRepository {
@@ -37,10 +40,10 @@ class FeedRepositoryImpl implements FeedRepository {
   }
 
   @override
-  Stream<List<PostModel>> watchGroupPosts(String groupId, String dateId) {
+  Stream<List<PostModel>> watchUserPosts(String uid, String dateId) {
     return _firestore
         .collection('posts')
-        .where('groupId', isEqualTo: groupId)
+        .where('userId', isEqualTo: uid)
         .where('date', isEqualTo: dateId)
         .snapshots()
         .map((snap) => snap.docs

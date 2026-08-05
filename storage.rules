@@ -6,8 +6,9 @@ rules_version = '2';
 //
 // Cost note: photo uploads are the main storage/egress cost driver. Client
 // (Flutter) MUST compress/resize before upload — see
-// mobile/lib/features/camera/data/camera_repository.dart TODO. Do not raise
-// these size limits without re-checking Firebase Storage free-tier quotas.
+// mobile/lib/features/camera/application/camera_controller.dart's
+// capture(). Do not raise the size cap below without re-checking Firebase
+// Storage free-tier quotas.
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -19,27 +20,36 @@ service firebase.storage {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
-    // Cross-service read of the groups collection (Firestore) to check
-    // membership. Path must use the literal "(default)" database id —
-    // Storage rules don't have Firestore rules' $(database) variable.
-    function isGroupMember(groupId) {
-      return isSignedIn() &&
-        request.auth.uid in
-          firestore.get(/databases/(default)/documents/groups/$(groupId)).data.memberIds;
+    // Cross-service reads of Firestore to check post visibility — same
+    // privacy model as firestore.rules' posts.allow read (owner, mutual
+    // connection, or the post is public). Storage rules don't have
+    // Firestore rules' $(database) variable — the literal "(default)" is
+    // required instead. Mirrors firestore.rules' connectionId().
+    function connectionId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
     }
 
-    // posts/{groupId}/{uid}/{postId}.jpg — groupId is embedded in the path
-    // (not just uid) specifically so this rule can check group membership
-    // without needing custom object metadata — see
-    // mobile/lib/features/camera/data/camera_repository.dart for the
-    // matching upload path construction.
-    match /posts/{groupId}/{uid}/{fileName} {
+    function isConnected(a, b) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/connections/$(connectionId(a, b)));
+    }
+
+    function canReadPost(postId) {
+      let post = firestore.get(/databases/(default)/documents/posts/$(postId)).data;
+      return post.isPublic == true
+        || request.auth.uid == post.userId
+        || isConnected(request.auth.uid, post.userId);
+    }
+
+    // posts/{uid}/{postId}.jpg — one unedited photo per post, owner-
+    // uploaded. postId is recovered from the filename (strip ".jpg") to
+    // look the post up in Firestore for the read check above.
+    match /posts/{uid}/{fileName} {
       allow write: if isSignedIn()
                    && request.auth.uid == uid
-                   && isGroupMember(groupId)
                    && request.resource.size < 8 * 1024 * 1024 // 8MB cap, cost guardrail
                    && request.resource.contentType.matches('image/.*');
-      allow read: if isGroupMember(groupId);
+      allow read: if canReadPost(fileName.split('.')[0]);
       allow delete: if isAdmin();
     }
 

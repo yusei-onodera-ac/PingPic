@@ -31,6 +31,11 @@ class _PublicFeedScreenState extends ConsumerState<PublicFeedScreen> {
       appBar: AppBar(
         title: const Text('みんなの投稿'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: '設定',
+            onPressed: () => context.push(AppRoutes.settings),
+          ),
           SegmentedButton<PublicFeedSort>(
             segments: const [
               ButtonSegment(

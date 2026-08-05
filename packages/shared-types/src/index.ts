@@ -56,30 +56,60 @@ export interface DailySchedule {
 export * from "./scheduleRules";
 
 // -----------------------------------------------------------------------
-// groups/{groupId}  — ⚠️ inferred, not defined in the original design doc.
+// friend_requests/{fromUid}_{toUid}   and   connections/{sortedUidA}_{sortedUidB}
 //
-// Design decision (not in the original spec): invite-code based
-// create/join, one group per user for this MVP (a user with no group yet
-// just doesn't have a doc where they're a member). Both mutations go
-// through Cloud Functions callables (functions/src/callable/groups.ts) —
-// NOT direct client writes — so invite-code uniqueness can be enforced
-// with a server-side transaction and firestore.rules can stay a flat
-// "members can read, nobody can write directly" rule. See
-// docs/DATA_MODEL.md for the full rationale.
+// Design decision (not in the original spec): PingPic went through two
+// earlier relationship models in this session — group membership, then a
+// one-directional "follow" graph — before landing here: a mutual
+// connection, gated by an approval step (request -> accept), after which
+// BOTH parties can see all of each other's posts. Closer to a "friend
+// request" than a Twitter-style follow.
+//
+// `friend_requests` docs are plain client writes/deletes (rules-enforced
+// — see firestore.rules) since the constraint per doc is simple. Turning
+// an accepted request into a `connections` doc is NOT a plain client
+// write, though — it's the one place server-side arbitration earns its
+// keep this time: `respondToFriendRequest` (functions/src/callable/
+// connections.ts) validates the request and atomically creates the
+// connection + deletes the request, via the Admin SDK. `connections`'
+// create rule is `if false` — the callable is the only way one is ever
+// created. Deleting one ("unfriend") IS a plain client write by either
+// party, no approval needed for that direction.
+//
+// `connections` uses a SINGLE doc per pair (id = the two uids sorted
+// ascending, joined with "_") rather than two mirrored per-user
+// subcollections, since the relationship is symmetric — one doc,
+// one exists() check from either side, no risk of the two mirrors
+// drifting out of sync.
 // -----------------------------------------------------------------------
 
-export interface Group {
-  name: string;
-  memberIds: string[];
-  inviteCode: string;
-  createdBy: string; // uid
+export type FriendRequestStatus = "pending";
+
+export interface FriendRequest {
+  fromUid: string;
+  toUid: string;
+  /** Denormalized so the recipient's incoming-requests list can show a
+   * name without an extra lookup — same convention as
+   * Post.authorDisplayName. */
+  fromDisplayName: string;
+  status: FriendRequestStatus;
   createdAt: FirestoreTimestamp;
 }
 
-/** invite_codes/{code} — lookup-only doc mapping a code to its group,
- * used by joinGroupByInviteCode. Never read/written directly by clients. */
-export interface InviteCode {
-  groupId: string;
+export interface Connection {
+  /** Exactly 2 uids, sorted ascending — matches the doc id. */
+  uids: [string, string];
+  /** Keyed by uid, so either party can look up the OTHER's name without
+   * a user-profile collection. */
+  displayNames: Record<string, string>;
+  createdAt: FirestoreTimestamp;
+}
+
+/** Deterministic connections/{...} doc id for a pair of uids, order-
+ * independent. Mirrored in mobile's ConnectionRepository (Dart) and
+ * firestore.rules' connectionId() — keep all three in sync. */
+export function connectionId(uidA: string, uidB: string): string {
+  return uidA < uidB ? `${uidA}_${uidB}` : `${uidB}_${uidA}`;
 }
 
 // -----------------------------------------------------------------------
@@ -89,14 +119,12 @@ export interface InviteCode {
 export type SlotNumber = 1 | 2 | 3;
 
 export interface Post {
-  groupId: string;
   userId: string;
   /** Denormalized from Firebase Auth's user.displayName at post time —
-   * there's no separate user-profile collection in this app (yet), and
-   * the public feed needs a name to show in its Instagram-style card
-   * header without a per-card user lookup. Matches the same
-   * "userId ?? email ?? '匿名ユーザー'" fallback used for prompt
-   * suggestions' submitterInfo. */
+   * there's no separate user-profile collection in this app, and the
+   * public feed / following feed both need a name to show without a
+   * per-card user lookup. Matches the same "userId ?? email ?? '匿名
+   * ユーザー'" fallback used for prompt suggestions' submitterInfo. */
   authorDisplayName: string;
   /** "YYYY-MM-DD" */
   date: string;
@@ -110,13 +138,16 @@ export interface Post {
    * no prompt-editing flow that would need to keep it in sync). */
   promptText: string;
   /**
-   * Chosen at capture time (not toggleable afterward — see
-   * mobile's CapturedPreviewView). A public post is visible to any
-   * signed-in user via the "みんなの投稿" feed, not just this post's
-   * group — see firestore.rules' posts read rule.
+   * Chosen at capture time (not toggleable afterward — see mobile's
+   * CapturedPreviewView). Controls visibility to the WIDER app, not to
+   * followers — followers can always see all of a user's posts
+   * regardless of this flag (see firestore.rules' posts read rule and
+   * docs/ARCHITECTURE.md's "Resolved: groups → followers" section for
+   * the full privacy model). `isPublic: true` additionally surfaces the
+   * post in the "みんなの投稿" feed, visible to any signed-in user.
    */
   isPublic: boolean;
-  /** Optional one-line comment posted alongside a public photo. Present
+  /** Optional one-line comment posted alongside a photo. Present
    * (possibly empty-string) even on private posts for schema simplicity,
    * but only ever shown in the UI for public ones. */
   caption: string;

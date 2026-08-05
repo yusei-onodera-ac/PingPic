@@ -19,6 +19,12 @@ enum PublicFeedSort {
 abstract class PublicFeedRepository {
   Stream<List<PostModel>> watchPublicPosts({required PublicFeedSort sort});
 
+  /// One user's public posts, newest first — ProfileScreen's "公開とした
+  ///投稿" grid. Needs the (userId, isPublic, postedAt desc) composite
+  /// index in firestore.indexes.json (a two-equality-plus-orderBy query,
+  /// unlike watchPublicPosts' single-equality-plus-orderBy ones).
+  Stream<List<PostModel>> watchUserPublicPosts(String uid);
+
   /// Whether the signed-in user has liked this post — one listener per
   /// visible card (cheap: a single-document snapshot each), rather than
   /// trying to batch "which of these N posts have I liked" into one
@@ -57,6 +63,19 @@ class PublicFeedRepositoryImpl implements PublicFeedRepository {
               .map((d) => PostModel.fromJson({...d.data(), 'id': d.id}))
               .toList(growable: false),
         );
+  }
+
+  @override
+  Stream<List<PostModel>> watchUserPublicPosts(String uid) {
+    return _firestore
+        .collection('posts')
+        .where('userId', isEqualTo: uid)
+        .where('isPublic', isEqualTo: true)
+        .orderBy('postedAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => PostModel.fromJson({...d.data(), 'id': d.id}))
+            .toList(growable: false));
   }
 
   @override
