@@ -35,13 +35,10 @@ lib/
 ```
 
 Still genuinely stubbed/TODO despite the above being "real":
-- `FirebaseMessaging.onBackgroundMessage` — the widget only updates while the app process is
-  alive (foreground, or backgrounded-but-not-killed); a prompt arriving while fully terminated
-  won't reach the widget until the app is next opened. See
-  `features/widget_bridge/home_widget_service.dart`'s TODO.
 - The native WidgetKit SwiftUI view itself and its Xcode target (manual step, see
   [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md))
-- "Leave group" / belonging to more than one group (MVP is intentionally one group per user)
+- Belonging to more than one group (MVP is intentionally one group per user — there IS a leave
+  flow, see FeedScreen's app bar menu, just no multi-group support)
 - Image compression parameters (1600px / quality 80 in `CaptureController.capture`) are a
   starting guess, not tuned against real device photos
 

@@ -67,13 +67,9 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
 ## Known open gaps
 
 - **Hosting choice for `admin-panel`**: Vercel vs. Firebase Hosting is left open; see above.
-- **No "leave group" / multi-group support**: the invite-code flow (below) is intentionally an
-  MVP simplification — one group per user, no leave flow.
-- **Widget updates only reach a live app process**: `HomeWidgetService` is wired to real call
-  sites now (a new prompt notification, and after posting), but there's no
-  `FirebaseMessaging.onBackgroundMessage` handler, so a prompt that arrives while the app is
-  fully terminated won't update the widget until the app is next opened. See
-  `mobile/lib/features/widget_bridge/home_widget_service.dart`'s TODO.
+- **No multi-group support**: the invite-code flow (below) is intentionally an MVP
+  simplification — one group per user (there is a "leave group" flow, see below, but no way to
+  belong to more than one at a time).
 - **Image compression tuning**: `CaptureController.capture()` compresses to ~1600px/quality 80
   before upload, but those numbers are a starting guess, not tuned against real device photos.
 
@@ -86,7 +82,8 @@ this: **invite-code based create/join**, one group per user for this MVP. `creat
 with a server-side Firestore transaction, and `firestore.rules` stays simple (members can read
 their own group; everything else is `allow write: if false`). This also finally let
 `posts` and Storage's `storage.rules` enforce real group-membership checks instead of the
-placeholder TODOs from earlier passes.
+placeholder TODOs from earlier passes. A `leaveGroup` callable exists too (same file) — if the
+last member leaves, it deletes the group and its invite code rather than leaving them orphaned.
 
 ### Resolved: admin auth (session cookies + server-side verification)
 
@@ -104,6 +101,16 @@ before that check ran, and nothing was verified server-side. Now:
 - The first (and every subsequent) admin's `admin: true` custom claim is granted via
   `scripts/grant-admin-claim.mjs`, run locally with a service account key — deliberately not a
   self-service admin-panel action. See [SETUP.md](./SETUP.md).
+
+### Resolved: widget updates while fully terminated
+
+`HomeWidgetService`'s call sites (new prompt notification, after posting) only ran while the app
+process was alive. `mobile/lib/main.dart` now registers
+`FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler)` — a top-level function
+(`features/notifications/data/push_notification_service.dart`) that FCM runs in its own isolate
+with no access to app state, so it re-initializes Firebase and talks to the `home_widget` package
+directly rather than through `HomeWidgetServiceImpl`. This is what makes the widget update even
+when a prompt arrives with the app fully killed, not just backgrounded.
 
 ### Resolved: group feed UI
 

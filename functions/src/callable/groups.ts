@@ -11,9 +11,12 @@ import { FUNCTIONS_REGION } from "../config/params";
  * server-side transaction and firestore.rules can stay a flat
  * "members can read, nobody writes directly" rule.
  *
- * MVP simplification: one group per user. There's no explicit "leave
- * group" or multi-group support here — a user just is or isn't in
- * `memberIds` of whichever single group they joined.
+ * MVP simplification: one group per user — there's no multi-group
+ * support (a member can only ever be looked up via a single
+ * `memberIds array-contains uid` query returning one doc). `leaveGroup`
+ * below does exist, and cleans up the group entirely if the last member
+ * leaves, so the invite code doesn't linger forever pointing at an empty
+ * group.
  */
 
 // Excludes visually-ambiguous characters (0/O, 1/I/L) since this is
@@ -107,4 +110,47 @@ export const joinGroupByInviteCode = onCall({ region: FUNCTIONS_REGION }, async 
 
   const groupSnap = await groupRef.get();
   return { groupId, name: groupSnap.data()?.name as string | undefined };
+});
+
+export const leaveGroup = onCall({ region: FUNCTIONS_REGION }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "サインインが必要です");
+  }
+
+  const groupId = request.data?.groupId as string | undefined;
+  if (!groupId) {
+    throw new HttpsError("invalid-argument", "groupId is required");
+  }
+
+  const db = getFirestore(getAdminApp());
+  const groupRef = db.collection("groups").doc(groupId);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(groupRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "グループが見つかりません");
+    }
+
+    const data = snap.data()!;
+    const memberIds = (data.memberIds ?? []) as string[];
+    if (!memberIds.includes(uid)) {
+      throw new HttpsError("failed-precondition", "このグループのメンバーではありません");
+    }
+
+    const remaining = memberIds.filter((id) => id !== uid);
+    if (remaining.length === 0) {
+      // Last member leaving — delete the group and its invite code
+      // rather than leaving an orphaned doc and a dead code sitting in
+      // invite_codes forever.
+      tx.delete(groupRef);
+      if (data.inviteCode) {
+        tx.delete(db.collection("invite_codes").doc(data.inviteCode as string));
+      }
+    } else {
+      tx.update(groupRef, { memberIds: remaining });
+    }
+  });
+
+  return { ok: true };
 });

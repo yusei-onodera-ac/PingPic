@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGroup, joinGroupByInviteCode } from "./groups";
+import { createGroup, joinGroupByInviteCode, leaveGroup } from "./groups";
 
 describe("group callables (smoke test)", () => {
   it("are exported as defined Cloud Functions", () => {
@@ -9,5 +9,6 @@ describe("group callables (smoke test)", () => {
     // (firebase-functions-test), which is a TODO.
     expect(createGroup).toBeDefined();
     expect(joinGroupByInviteCode).toBeDefined();
+    expect(leaveGroup).toBeDefined();
   });
 });

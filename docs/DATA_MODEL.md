@@ -40,7 +40,8 @@ invite-code uniqueness can be enforced with a server-side transaction and `fires
 a flat "members can read, nobody writes directly" rule. Clients list their own group via
 `where('memberIds', 'array-contains', uid)`.
 
-Still open: no "leave group" flow, and no support for a user belonging to more than one group.
+Still open: no support for a user belonging to more than one group (there is a `leaveGroup`
+callable and a matching FeedScreen UI action, just no way to be in two groups at once).
 
 ## `invite_codes/{code}` — lookup table for joining
 
