@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// PingPic Storage security rules — SCAFFOLD.
+// PingPic Storage security rules.
 // Inferred requirement: posts.photoUrl implies a Storage bucket, though the
 // design doc's data model section never names one explicitly.
 //
@@ -19,14 +19,27 @@ service firebase.storage {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
-    // posts/{uid}/{postId}.jpg — one unedited photo per post, owner-uploaded.
-    match /posts/{uid}/{fileName} {
+    // Cross-service read of the groups collection (Firestore) to check
+    // membership. Path must use the literal "(default)" database id —
+    // Storage rules don't have Firestore rules' $(database) variable.
+    function isGroupMember(groupId) {
+      return isSignedIn() &&
+        request.auth.uid in
+          firestore.get(/databases/(default)/documents/groups/$(groupId)).data.memberIds;
+    }
+
+    // posts/{groupId}/{uid}/{postId}.jpg — groupId is embedded in the path
+    // (not just uid) specifically so this rule can check group membership
+    // without needing custom object metadata — see
+    // mobile/lib/features/camera/data/camera_repository.dart for the
+    // matching upload path construction.
+    match /posts/{groupId}/{uid}/{fileName} {
       allow write: if isSignedIn()
                    && request.auth.uid == uid
+                   && isGroupMember(groupId)
                    && request.resource.size < 8 * 1024 * 1024 // 8MB cap, cost guardrail
                    && request.resource.contentType.matches('image/.*');
-      allow read: if isSignedIn();
-                  // TODO: restrict to members of the post's group once groups collection exists
+      allow read: if isGroupMember(groupId);
       allow delete: if isAdmin();
     }
 

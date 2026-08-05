@@ -57,12 +57,29 @@ export * from "./scheduleRules";
 
 // -----------------------------------------------------------------------
 // groups/{groupId}  — ⚠️ inferred, not defined in the original design doc.
-// TODO: unconfirmed — no group creation/invite/join flow specified yet.
+//
+// Design decision (not in the original spec): invite-code based
+// create/join, one group per user for this MVP (a user with no group yet
+// just doesn't have a doc where they're a member). Both mutations go
+// through Cloud Functions callables (functions/src/callable/groups.ts) —
+// NOT direct client writes — so invite-code uniqueness can be enforced
+// with a server-side transaction and firestore.rules can stay a flat
+// "members can read, nobody can write directly" rule. See
+// docs/DATA_MODEL.md for the full rationale.
 // -----------------------------------------------------------------------
 
 export interface Group {
   name: string;
   memberIds: string[];
+  inviteCode: string;
+  createdBy: string; // uid
+  createdAt: FirestoreTimestamp;
+}
+
+/** invite_codes/{code} — lookup-only doc mapping a code to its group,
+ * used by joinGroupByInviteCode. Never read/written directly by clients. */
+export interface InviteCode {
+  groupId: string;
 }
 
 // -----------------------------------------------------------------------

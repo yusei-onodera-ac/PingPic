@@ -29,19 +29,22 @@ lib/
 │   ├── notifications/    # real (firebase_messaging + local notifications + tap deep-link)
 │   ├── auth/              # real, email/password (method itself is an open product decision)
 │   ├── suggestions/       # real (writes prompt_suggestions)
+│   ├── groups/             # real (invite-code create/join via Cloud Functions callables)
 │   └── widget_bridge/     # real (home_widget <-> WidgetKit data bridge)
 └── shared/models/         # Group, Post, PromptSuggestion — mirror shared-types
 ```
 
 Still genuinely stubbed/TODO despite the above being "real":
 - Image compression before upload (cost guardrail — see `CaptureController.capture`)
-- The actual `groupId` passed on post creation (`'TODO_GROUP_ID'` placeholder in
-  `camera_screen.dart` — blocked on the undefined `groups` collection, see
-  [docs/DATA_MODEL.md](../docs/DATA_MODEL.md))
+- A real shared group feed (seeing groupmates' blurred/unblurred posts) — FeedScreen currently
+  only shows the signed-in user's own post status per slot; groups themselves are real now (see
+  `features/groups/`), this is specifically the "see everyone else's posts" UI that's still
+  unbuilt
 - Calling `HomeWidgetService.updateWidgetData` from the real app flow (service itself works, just
   not wired to a call site yet)
 - The native WidgetKit SwiftUI view itself and its Xcode target (manual step, see
   [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md))
+- "Leave group" / belonging to more than one group (MVP is intentionally one group per user)
 
 For the iOS home screen widget (WidgetKit extension, App Group setup), see
 [docs/IOS_WIDGET_SETUP.md](../docs/IOS_WIDGET_SETUP.md) — it's a manual Xcode step performed

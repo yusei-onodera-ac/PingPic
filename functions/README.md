@@ -26,12 +26,20 @@ src/
 ├── scheduled/
 │   ├── dailyBatchJob.ts           # 00:00 cron — implemented
 │   └── sendScheduledPrompt.ts     # HTTPS, invoked by Cloud Tasks — implemented
+├── callable/
+│   └── groups.ts                  # createGroup / joinGroupByInviteCode — implemented
 ├── services/
 │   ├── scheduleService.ts         # implemented
 │   ├── promptPoolService.ts       # implemented
 │   └── notificationService.ts     # implemented (Cloud Tasks scheduling)
 └── utils/timeSlot.ts              # implemented (pickValidSendTime algorithm + tests)
 ```
+
+`callable/groups.ts` is the invite-code based group create/join flow — a design decision made
+when implementing it (the design doc never specified one), documented in
+[docs/DATA_MODEL.md](../docs/DATA_MODEL.md) and `packages/shared-types/src/index.ts`'s `Group`
+doc comment. It's the reason `firestore.rules`' `posts` create/read rules could finally get a
+real `isGroupMember()` check instead of a placeholder TODO.
 
 `dailyBatchJob` and its dependencies (`pickValidSendTime`, `promptPoolService`,
 `scheduleService`, `notificationService`, `sendScheduledPrompt`) are real logic, not stubs — see

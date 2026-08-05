@@ -25,14 +25,32 @@ Doc id: `YYYY-MM-DD`.
 
 ## `groups/{groupId}` — ⚠️ inferred, not in the original design doc
 
-| field     | type       | notes |
-|-----------|------------|-------|
-| name      | `string`   | |
-| memberIds | `string[]` | Firebase Auth uids |
+| field      | type                    | notes |
+|------------|--------------------------|-------|
+| name       | `string`                 | |
+| memberIds  | `string[]`               | Firebase Auth uids |
+| inviteCode | `string`                 | 6-char code, see below |
+| createdBy  | `string`                 | uid of the creator |
+| createdAt  | Firestore `Timestamp`    | |
 
-**TODO: unconfirmed** — no group creation/invite/join flow is defined anywhere in the design
-doc. This is the minimal shape needed for `posts.groupId` and Firestore/Storage rules to
-type-check and compile against. Revisit once the actual group-management UX is designed.
+**Design decision (not in the original spec)**: invite-code based create/join, one group per
+user for this MVP — see `functions/src/callable/groups.ts`. Mutated only through the
+`createGroup` / `joinGroupByInviteCode` callables (Admin SDK), never by direct client writes, so
+invite-code uniqueness can be enforced with a server-side transaction and `firestore.rules` stays
+a flat "members can read, nobody writes directly" rule. Clients list their own group via
+`where('memberIds', 'array-contains', uid)`.
+
+Still open: no "leave group" flow, and no support for a user belonging to more than one group.
+
+## `invite_codes/{code}` — lookup table for joining
+
+| field   | type     | notes |
+|---------|----------|-------|
+| groupId | `string` | |
+
+Doc id is the invite code itself. Never read or written by clients directly — only
+`joinGroupByInviteCode` touches it, via the Admin SDK. If it were client-readable, codes could be
+enumerated without going through that function's validation.
 
 ## `posts/{postId}`
 

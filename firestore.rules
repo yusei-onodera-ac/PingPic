@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// PingPic Firestore security rules — SCAFFOLD.
+// PingPic Firestore security rules.
 //
 // Field names below are camelCase, matching packages/shared-types/src/index.ts
 // (the source of truth for document shapes) and the hand-mirrored Dart
@@ -9,14 +9,9 @@ rules_version = '2';
 // as `null` and every equality check fails closed).
 //
 // Cloud Functions (Admin SDK) bypass these rules entirely, so the 00:00
-// batch job's writes to daily_schedules/posts/prompt_suggestions are not
-// affected by anything below.
-//
-// KNOWN GAP: the design doc implies `posts.groupId` but never defines a
-// `groups` collection or membership model. Several rules below are marked
-// "TODO: group membership check" and are intentionally permissive/strict
-// placeholders until that collection and its shape are decided — see
-// docs/DATA_MODEL.md.
+// batch job's writes to daily_schedules/posts/prompt_suggestions, and
+// createGroup/joinGroupByInviteCode's writes to groups/invite_codes, are
+// not affected by anything below.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -28,6 +23,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
+    function isGroupMember(groupId) {
+      return request.auth.uid in
+        get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+    }
+
     // --- daily_schedules/{date} ---
     // date doc id format: "YYYY-MM-DD". Holds `slots: ScheduleSlot[3]`,
     // each { sendTime, promptText, credit }.
@@ -37,22 +37,35 @@ service cloud.firestore {
     }
 
     // --- groups/{groupId} ---
-    // Minimal placeholder shape: { name, memberIds: [uid, ...] }.
-    // TODO: unconfirmed — no group management flow in design doc yet.
+    // { name, memberIds, inviteCode, createdBy, createdAt }. Mutated only
+    // via the createGroup / joinGroupByInviteCode Cloud Functions callables
+    // (Admin SDK) — never directly by clients, so invite-code uniqueness
+    // can be enforced with a server-side transaction. Members can list
+    // their own group via `where('memberIds', 'array-contains', uid)`,
+    // which this rule permits (Firestore evaluates list queries against
+    // this rule per matching document).
     match /groups/{groupId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
-      allow write: if isAdmin(); // TODO: replace with real group-admin model
+      allow write: if false;
+    }
+
+    // --- invite_codes/{code} ---
+    // { groupId } — lookup-only doc used by joinGroupByInviteCode.
+    // Never read or written by clients directly (the callable does the
+    // lookup with the Admin SDK) — if it were client-readable, anyone
+    // could enumerate/guess codes without going through the join flow's
+    // validation.
+    match /invite_codes/{code} {
+      allow read, write: if false;
     }
 
     // --- posts/{postId} ---
     // { groupId, userId, date, slotNumber, photoUrl, postedAt }
     match /posts/{postId} {
       allow create: if isSignedIn()
-                    && request.resource.data.userId == request.auth.uid;
-                    // TODO: group membership check once groups collection is finalized
-                    // && request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds;
-      allow read: if isSignedIn();
-                  // TODO: restrict to request.auth.uid in the post's group's memberIds
+                    && request.resource.data.userId == request.auth.uid
+                    && isGroupMember(request.resource.data.groupId);
+      allow read: if isSignedIn() && isGroupMember(resource.data.groupId);
       allow update, delete: if isAdmin(); // authors don't edit/delete posts per spec (no editing feature)
     }
 

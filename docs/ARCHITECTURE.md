@@ -63,13 +63,30 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
   add them only once real queries (e.g. `posts` by `groupId + date + slotNumber`) are built, to
   avoid maintaining unused indexes.
 
-## Known open gaps (flagged, not solved, in this scaffold)
+## Known open gaps
 
-- **`groups` collection**: `posts.groupId` implies group membership, but the design doc never
-  defines how groups are created/joined. A minimal placeholder type exists
-  (`packages/shared-types/src/index.ts` → `Group`), and every rule/query that needs real
-  membership logic is marked `TODO: unconfirmed`.
 - **Admin auth**: production should move from the client-side `AuthGuard` redirect to Next.js
   `middleware.ts` + session cookies (`Admin SDK.createSessionCookie`). Scaffolded as a TODO —
   see `admin-panel/src/components/layout/AuthGuard.tsx`.
 - **Hosting choice for `admin-panel`**: Vercel vs. Firebase Hosting is left open; see above.
+- **Group feed UI**: now that `groups` exists (see below), `mobile`'s FeedScreen only shows the
+  signed-in user's own post status per slot — a real shared group feed (seeing groupmates'
+  blurred/unblurred posts, per the design doc's retention mechanic) is still unbuilt.
+- **No "leave group" / multi-group support**: the invite-code flow (below) is intentionally an
+  MVP simplification — one group per user, no leave flow.
+- **Image compression before upload**: not implemented — see
+  `mobile/lib/features/camera/application/camera_controller.dart`'s TODO. `storage.rules` only
+  rejects >8MB, it doesn't shrink anything.
+- **HomeWidgetService not called from any real app flow yet**: the service and its App Group
+  wiring work, but nothing invokes `updateWidgetData` after a prompt notification or a post yet.
+
+### Resolved: `groups` collection (was previously unconfirmed)
+
+The design doc never defined how groups are created or joined. Decision made when implementing
+this: **invite-code based create/join**, one group per user for this MVP. `createGroup` and
+`joinGroupByInviteCode` (`functions/src/callable/groups.ts`) are the only way `groups` and
+`invite_codes` get written — never direct client writes — so invite-code uniqueness is enforced
+with a server-side Firestore transaction, and `firestore.rules` stays simple (members can read
+their own group; everything else is `allow write: if false`). This also finally let
+`posts` and Storage's `posts.rules` enforce real group-membership checks instead of the
+placeholder TODOs from earlier passes.

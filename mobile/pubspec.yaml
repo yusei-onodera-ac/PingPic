@@ -18,6 +18,7 @@ dependencies:
   cloud_firestore: ^5.0.0
   firebase_storage: ^12.1.0
   firebase_messaging: ^15.0.0
+  cloud_functions: ^5.1.0 # createGroup / joinGroupByInviteCode callables
 
   # In-app-only camera. Deliberately NOT using image_picker's camera source —
   # that opens the native camera sheet (closer to "pick a photo") rather
