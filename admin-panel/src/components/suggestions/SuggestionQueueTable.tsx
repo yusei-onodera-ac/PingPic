@@ -1,47 +1,68 @@
 "use client";
 
-import type { PromptSuggestion } from "@pingpic/shared-types";
-
-/**
- * TODO: implement. Should query prompt_suggestions where status == "pending",
- * ordered by createdAt, and render an "採用" (adopt) button per row that
- * opens a slot picker to place it into a calendar date/slot (setting
- * credit to { type: "user", ... } and status to "approved").
- * Returning [] for now so the page renders without crashing.
- */
-function usePendingSuggestions(): Array<{ id: string; suggestion: PromptSuggestion }> {
-  return [];
-}
+import { useState } from "react";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
+import { usePendingSuggestions, type SuggestionRow } from "@/lib/hooks/usePendingSuggestions";
+import { AdoptSuggestionDialog } from "./AdoptSuggestionDialog";
 
 export function SuggestionQueueTable() {
-  const pending = usePendingSuggestions();
+  const { rows, loading, error } = usePendingSuggestions();
+  const [adopting, setAdopting] = useState<SuggestionRow | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
-  if (pending.length === 0) {
-    return <p style={{ color: "#888" }}>保留中のお題提案はありません。(TODO: Firestore query not yet wired)</p>;
+  if (loading) return <p style={{ color: "#888" }}>読み込み中…</p>;
+  if (error) return <p style={{ color: "crimson" }}>読み込みエラー: {error}</p>;
+
+  if (rows.length === 0) {
+    return <p style={{ color: "#888" }}>保留中のお題提案はありません。</p>;
+  }
+
+  async function handleReject(id: string) {
+    setRejectingId(id);
+    try {
+      await updateDoc(doc(db, "prompt_suggestions", id), { status: "rejected" });
+      // onSnapshot in usePendingSuggestions picks up the removal automatically.
+    } finally {
+      setRejectingId(null);
+    }
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>提案</th>
-          <th>提案者</th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        {pending.map(({ id, suggestion }) => (
-          <tr key={id}>
-            <td>{suggestion.suggestionText}</td>
-            <td>{suggestion.submitterInfo.displayName}</td>
-            <td>
-              <button disabled title="TODO: adopt-into-slot flow">
-                採用
-              </button>
-            </td>
+    <>
+      <table>
+        <thead>
+          <tr>
+            <th>提案</th>
+            <th>提案者</th>
+            <th />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{row.suggestion.suggestionText}</td>
+              <td>{row.suggestion.submitterInfo.displayName}</td>
+              <td style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setAdopting(row)}>採用</button>
+                <button onClick={() => handleReject(row.id)} disabled={rejectingId === row.id}>
+                  却下
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {adopting && (
+        <AdoptSuggestionDialog
+          row={adopting}
+          onClose={() => setAdopting(null)}
+          onAdopted={() => {
+            /* onSnapshot in usePendingSuggestions picks up the status
+             * change automatically — nothing else to do here. */
+          }}
+        />
+      )}
+    </>
   );
 }

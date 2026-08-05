@@ -1,40 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import type { DailySchedule } from "@pingpic/shared-types";
+import type { DatesSetArg } from "@fullcalendar/core";
+import { useDailySchedules } from "@/lib/hooks/useDailySchedules";
+import { toDateId } from "@/lib/dateId";
 import { SlotEditorModal } from "./SlotEditorModal";
-
-/**
- * TODO: implement. Should query daily_schedules for the visible month range
- * and return { [dateId: string]: DailySchedule }. Returning an empty object
- * for now so CalendarView renders (with no events) rather than crashing.
- */
-function useDailySchedules(_monthStart: Date, _monthEnd: Date): Record<string, DailySchedule> {
-  return {};
-}
 
 export function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  // TODO: derive real month range from FullCalendar's datesSet callback
-  const schedules = useDailySchedules(new Date(), new Date());
+  const [visibleRange, setVisibleRange] = useState<{ start: string; end: string }>(() => {
+    const now = new Date();
+    return { start: toDateId(now), end: toDateId(now) };
+  });
 
-  const events = Object.entries(schedules).flatMap(([dateId, schedule]) =>
-    schedule.slots.map((slot, i) => ({
-      id: `${dateId}-${i}`,
-      title: slot.promptText,
-      date: dateId,
-    }))
+  const { schedules, loading, error } = useDailySchedules(visibleRange.start, visibleRange.end);
+
+  const events = useMemo(
+    () =>
+      Object.entries(schedules).flatMap(([dateId, schedule]) =>
+        (schedule.slots ?? [])
+          .map((slot, i) => (slot ? { id: `${dateId}-${i}`, title: slot.promptText, date: dateId } : null))
+          .filter((e): e is { id: string; title: string; date: string } => e !== null)
+      ),
+    [schedules]
   );
+
+  function handleDatesSet(arg: DatesSetArg) {
+    // FullCalendar's month grid includes leading/trailing days from
+    // adjacent months — query that full visible range, not just the
+    // calendar month, so those cells show real data too.
+    setVisibleRange({ start: toDateId(arg.start), end: toDateId(arg.end) });
+  }
 
   return (
     <div>
+      {loading && <p style={{ color: "#888" }}>読み込み中…</p>}
+      {error && <p style={{ color: "crimson" }}>読み込みエラー: {error}</p>}
       <FullCalendar
         plugins={[dayGridPlugin]}
         initialView="dayGridMonth"
         events={events}
+        datesSet={handleDatesSet}
         dateClick={(info) => setSelectedDate(info.dateStr)}
+        height="auto"
       />
       {selectedDate && (
         <SlotEditorModal

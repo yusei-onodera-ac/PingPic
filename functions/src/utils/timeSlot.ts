@@ -1,9 +1,9 @@
-import type { FirestoreTimestamp } from "@pingpic/shared-types";
+import { WINDOW_START_HOUR, WINDOW_END_HOUR, MIN_GAP_HOURS, timestampToDate } from "@pingpic/shared-types";
 
-/** Notification window per docs/DATA_MODEL.md / design spec. */
-export const WINDOW_START_HOUR = 7; // 07:00
-export const WINDOW_END_HOUR = 22; // 22:00
-export const MIN_GAP_HOURS = 4;
+// Re-exported so existing imports of these from this module keep working —
+// canonical definitions live in packages/shared-types (shared with
+// admin-panel's client-side validation / timestamp reading too).
+export { WINDOW_START_HOUR, WINDOW_END_HOUR, MIN_GAP_HOURS, timestampToDate };
 
 /**
  * Returns the Date for `hour`:00:00 JST on the same calendar date as
@@ -78,10 +78,4 @@ export function pickValidSendTime(date: Date, existingSendTimes: Date[]): Date {
   // Unreachable in practice (floating point edge case at most) — fall back
   // to the start of the last allowed interval rather than crash.
   return new Date(allowed[allowed.length - 1][0]);
-}
-
-/** Reads a structural FirestoreTimestamp (real Admin/Client SDK Timestamp
- * instances satisfy this shape too) back into a JS Date. */
-export function timestampToDate(ts: FirestoreTimestamp): Date {
-  return new Date(ts.seconds * 1000 + ts.nanoseconds / 1e6);
 }

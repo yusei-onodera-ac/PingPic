@@ -11,9 +11,9 @@ reads as `null` and every equality check fails closed) rather than throwing a vi
 
 Doc id: `YYYY-MM-DD`.
 
-| field | type                                | notes                          |
-|-------|--------------------------------------|----------------------------------|
-| slots | `ScheduleSlot[3]` (fixed length 3)   | slot 1/2/3 in send-time order    |
+| field | type                                          | notes                                                                 |
+|-------|------------------------------------------------|-------------------------------------------------------------------------|
+| slots | `(ScheduleSlot \| null)[3]` (fixed length 3)   | slot 1/2/3 in order. `null` = not yet configured by an admin — normal during the day, auto-filled by `dailyBatchJob` at 00:00. A missing doc means all 3 are effectively null. |
 
 `ScheduleSlot`:
 

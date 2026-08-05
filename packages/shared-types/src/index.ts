@@ -20,6 +20,13 @@ export interface FirestoreTimestamp {
   nanoseconds: number;
 }
 
+/** Reads a structural FirestoreTimestamp (real Admin/Client SDK Timestamp
+ * instances satisfy this shape too, since both expose these two fields)
+ * back into a JS Date, without needing either SDK's Timestamp class. */
+export function timestampToDate(ts: FirestoreTimestamp): Date {
+  return new Date(ts.seconds * 1000 + ts.nanoseconds / 1e6);
+}
+
 // -----------------------------------------------------------------------
 // daily_schedules/{date}   (doc id: "YYYY-MM-DD")
 // -----------------------------------------------------------------------
@@ -34,10 +41,19 @@ export interface ScheduleSlot {
   credit: PromptCredit;
 }
 
-/** Always exactly 3 slots (T1, T2, T3), index 0/1/2. */
+/**
+ * Always length 3 (index 0/1/2 = slot 1/2/3). A `null` entry means that
+ * slot hasn't been configured by an admin yet — this is the normal state
+ * for part of a day before the 00:00 batch job
+ * (functions/src/scheduled/dailyBatchJob.ts) auto-fills whatever is still
+ * null at midnight. A missing document (date not yet touched at all)
+ * should be treated identically to `{ slots: [null, null, null] }`.
+ */
 export interface DailySchedule {
-  slots: [ScheduleSlot, ScheduleSlot, ScheduleSlot];
+  slots: [ScheduleSlot | null, ScheduleSlot | null, ScheduleSlot | null];
 }
+
+export * from "./scheduleRules";
 
 // -----------------------------------------------------------------------
 // groups/{groupId}  — ⚠️ inferred, not defined in the original design doc.
