@@ -21,12 +21,24 @@ useful (it reads/writes Firestore).
 
 ```
 src/
-├── index.ts                # exported functions
-├── config/firebaseAdmin.ts # Admin SDK singleton + secrets wiring point
-├── scheduled/dailyBatchJob.ts
-├── services/                # scheduleService, promptPoolService, notificationService — all STUBS
-└── utils/timeSlot.ts        # STUB
+├── index.ts                       # exported functions
+├── config/{firebaseAdmin,params}.ts   # Admin SDK singleton, deploy-env params
+├── scheduled/
+│   ├── dailyBatchJob.ts           # 00:00 cron — implemented
+│   └── sendScheduledPrompt.ts     # HTTPS, invoked by Cloud Tasks — implemented
+├── services/
+│   ├── scheduleService.ts         # implemented
+│   ├── promptPoolService.ts       # implemented
+│   └── notificationService.ts     # implemented (Cloud Tasks scheduling)
+└── utils/timeSlot.ts              # implemented (pickValidSendTime algorithm + tests)
 ```
 
-Everything under `services/` and `utils/timeSlot.ts` throws `not implemented` — they exist to
-pin down function signatures the scaffold's tests/dailyBatchJob shape already depend on.
+`dailyBatchJob` and its dependencies (`pickValidSendTime`, `promptPoolService`,
+`scheduleService`, `notificationService`, `sendScheduledPrompt`) are real logic, not stubs — see
+[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) "Cost design" for the global-topic + Cloud Tasks
+approach, and [docs/SETUP.md](../docs/SETUP.md) for the one-time Cloud Tasks queue/IAM setup this
+needs before it'll actually deliver a push. `npm test` covers `pickValidSendTime`'s scheduling
+algorithm with property-style checks (window bounds, gap enforcement, exhaustion).
+
+Still genuinely out of scope for this pass: the mobile app's camera/UI, WidgetKit, and the
+admin-panel's calendar edit UX — see the repo-root README's stub/real split.

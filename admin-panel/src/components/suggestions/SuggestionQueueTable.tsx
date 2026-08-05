@@ -6,7 +6,7 @@ import type { PromptSuggestion } from "@pingpic/shared-types";
  * TODO: implement. Should query prompt_suggestions where status == "pending",
  * ordered by createdAt, and render an "採用" (adopt) button per row that
  * opens a slot picker to place it into a calendar date/slot (setting
- * credit_type to { type: "user", ... } and status to "approved").
+ * credit to { type: "user", ... } and status to "approved").
  * Returning [] for now so the page renders without crashing.
  */
 function usePendingSuggestions(): Array<{ id: string; suggestion: PromptSuggestion }> {

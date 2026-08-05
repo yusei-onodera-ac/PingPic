@@ -2,11 +2,17 @@ rules_version = '2';
 
 // PingPic Firestore security rules — SCAFFOLD.
 //
+// Field names below are camelCase, matching packages/shared-types/src/index.ts
+// (the source of truth for document shapes) and the hand-mirrored Dart
+// models in mobile/lib/**/data/*_model.dart — NOT snake_case. Keep these in
+// sync; a mismatch here silently breaks every write (the field just reads
+// as `null` and every equality check fails closed).
+//
 // Cloud Functions (Admin SDK) bypass these rules entirely, so the 00:00
 // batch job's writes to daily_schedules/posts/prompt_suggestions are not
 // affected by anything below.
 //
-// KNOWN GAP: the design doc defines `posts.group_id` but never defines a
+// KNOWN GAP: the design doc implies `posts.groupId` but never defines a
 // `groups` collection or membership model. Several rules below are marked
 // "TODO: group membership check" and are intentionally permissive/strict
 // placeholders until that collection and its shape are decided — see
@@ -23,48 +29,48 @@ service cloud.firestore {
     }
 
     // --- daily_schedules/{date} ---
-    // date doc id format: "YYYY-MM-DD". Holds slots 1..3 with
-    // { send_time, prompt_text, credit_type }.
+    // date doc id format: "YYYY-MM-DD". Holds `slots: ScheduleSlot[3]`,
+    // each { sendTime, promptText, credit }.
     match /daily_schedules/{date} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     // --- groups/{groupId} ---
-    // Minimal placeholder shape: { name, member_ids: [uid, ...] }.
+    // Minimal placeholder shape: { name, memberIds: [uid, ...] }.
     // TODO: unconfirmed — no group management flow in design doc yet.
     match /groups/{groupId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.member_ids;
+      allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
       allow write: if isAdmin(); // TODO: replace with real group-admin model
     }
 
     // --- posts/{postId} ---
-    // { group_id, user_id, date, slot_number, photo_url, posted_at }
+    // { groupId, userId, date, slotNumber, photoUrl, postedAt }
     match /posts/{postId} {
       allow create: if isSignedIn()
-                    && request.resource.data.user_id == request.auth.uid;
+                    && request.resource.data.userId == request.auth.uid;
                     // TODO: group membership check once groups collection is finalized
-                    // && request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.group_id)).data.member_ids;
+                    // && request.auth.uid in get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.memberIds;
       allow read: if isSignedIn();
-                  // TODO: restrict to request.auth.uid in the post's group's member_ids
+                  // TODO: restrict to request.auth.uid in the post's group's memberIds
       allow update, delete: if isAdmin(); // authors don't edit/delete posts per spec (no editing feature)
     }
 
     // --- prompt_suggestions/{suggestionId} ---
-    // { suggestion_text, submitter_info: { uid, display_name }, status }
+    // { suggestionText, submitterInfo: { uid, displayName }, status, createdAt }
     match /prompt_suggestions/{suggestionId} {
       allow create: if isSignedIn()
-                    && request.resource.data.submitter_info.uid == request.auth.uid
+                    && request.resource.data.submitterInfo.uid == request.auth.uid
                     && request.resource.data.status == 'pending';
       allow read: if isAdmin()
-                  || (isSignedIn() && resource.data.submitter_info.uid == request.auth.uid);
+                  || (isSignedIn() && resource.data.submitterInfo.uid == request.auth.uid);
       allow update: if isAdmin(); // approve/reject transitions are admin-only
       allow delete: if isAdmin();
     }
 
     // --- prompt_pool/{entryId} ---
     // "Popular prompt" stock used by the 00:00 auto-fill batch job.
-    // { prompt_text, usage_count, created_at }
+    // { promptText, usageCount, createdAt }
     match /prompt_pool/{entryId} {
       allow read: if isAdmin(); // not user-facing; batch job reads via Admin SDK anyway
       allow write: if isAdmin();

@@ -39,11 +39,16 @@ scaffold.
 Firebase Cloud Functions require the **Blaze (pay-as-you-go) plan**, but the design here is meant
 to comfortably fit inside the free-tier allowances of that plan for a small-to-medium user base:
 
-- **Batch job frequency**: `dailyBatchJob` runs once a day (00:00 JST). This is the only scheduled
-  function — no per-user or per-slot scheduled jobs.
-- **Push delivery pattern**: send FCM messages **per group topic** (`group_<id>`), not by looping
-  over every member's device token. This keeps a single day's 3 notification sends to O(groups)
-  function invocations instead of O(users), which matters once a group has many members.
+- **Batch job frequency**: `dailyBatchJob` runs once a day (00:00 JST). This is the only
+  *scheduled* (cron) function — no per-user or per-slot cron jobs.
+- **Push delivery pattern**: prompt content is identical for every user (the design doc has one
+  global prompt per slot, not per-group). So the batch job publishes to a **single global FCM
+  topic** (`daily_prompts`, see `functions/src/services/notificationService.ts`) — O(1) sends per
+  slot, cheaper than even a per-group loop. Exact send-time delivery (times are
+  admin-configurable per day, not fixed crons) is done via **Cloud Tasks**: `dailyBatchJob`
+  schedules 3 tasks/day targeting the `sendScheduledPrompt` HTTPS function, which fires the
+  actual FCM send at each slot's exact time. Both Cloud Tasks and the extra HTTPS invocations sit
+  comfortably inside free-tier allowances at 3 tasks/day.
 - **Firestore reads/writes**: avoid fan-out writes (e.g. don't write a "notified" doc per user per
   slot). Prefer topic messaging + client-side read state where possible.
 - **Storage egress**: photo uploads are the dominant cost driver at scale. The Flutter camera
@@ -55,12 +60,12 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
   always-on container for what's a low-traffic internal tool. `firebase.json` deliberately does
   **not** wire Hosting rewrites for it — this is a documented open decision, not a blocker.
 - **Firestore composite indexes**: none are pre-declared (`firestore.indexes.json` is empty) —
-  add them only once real queries (e.g. `posts` by `group_id + date + slot_number`) are built, to
+  add them only once real queries (e.g. `posts` by `groupId + date + slotNumber`) are built, to
   avoid maintaining unused indexes.
 
 ## Known open gaps (flagged, not solved, in this scaffold)
 
-- **`groups` collection**: `posts.group_id` implies group membership, but the design doc never
+- **`groups` collection**: `posts.groupId` implies group membership, but the design doc never
   defines how groups are created/joined. A minimal placeholder type exists
   (`packages/shared-types/src/index.ts` → `Group`), and every rule/query that needs real
   membership logic is marked `TODO: unconfirmed`.

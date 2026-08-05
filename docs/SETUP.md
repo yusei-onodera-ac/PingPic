@@ -41,6 +41,31 @@ firebase emulators:start --only firestore,functions,auth,storage
 Open http://localhost:4000 (Emulator UI) — confirm `dailyBatchJob` is listed under Functions and
 can be triggered manually ("Run now").
 
+### Cloud Tasks (one-time, per Firebase project)
+
+`dailyBatchJob` schedules exact-time push delivery via Cloud Tasks (see
+[docs/ARCHITECTURE.md](./ARCHITECTURE.md) "Cost design"). This needs a queue and an IAM grant
+that only have to be set up once per project, and can't be expressed in `firebase.json`:
+
+```bash
+gcloud tasks queues create daily-prompt-notifications --location=asia-northeast1
+
+# Allow the Cloud Tasks queue's service account to invoke the (non-public)
+# sendScheduledPrompt function it targets:
+gcloud functions add-invoker-policy-binding sendScheduledPrompt \
+  --region=asia-northeast1 \
+  --member="serviceAccount:<PROJECT_ID>@appspot.gserviceaccount.com"
+```
+
+Then set the `SEND_SCHEDULED_PROMPT_URL` param (chicken-and-egg: this needs `sendScheduledPrompt`
+to have been deployed once already, to know its URL):
+
+```bash
+firebase deploy --only functions:sendScheduledPrompt   # first deploy, to learn its URL
+firebase functions:params:set SEND_SCHEDULED_PROMPT_URL="https://asia-northeast1-<PROJECT_ID>.cloudfunctions.net/sendScheduledPrompt"
+firebase deploy --only functions                        # redeploy dailyBatchJob with the param set
+```
+
 Secrets (APNs signing key, etc.) are **never** stored in a `.env` file — use:
 
 ```bash

@@ -23,18 +23,16 @@ export async function readTodaySchedule(
 }
 
 /**
- * TODO: implement.
- * Persists the (possibly auto-filled) schedule back to Firestore, in a
- * single write. Should be called once per day by dailyBatchJob after
- * resolving all 3 slots.
+ * Persists the (possibly auto-filled) schedule back to Firestore in a
+ * single write. `merge: true` so that if only some slots were unset, we
+ * don't clobber anything else that might exist on the doc (there isn't
+ * anything else today, but it's a safe default for a once-a-day writer).
  */
 export async function writeTodaySchedule(
   date: Date,
   schedule: DailySchedule
 ): Promise<void> {
-  throw new Error(
-    `writeTodaySchedule: not implemented — scaffold stub. date=${todayDocId(
-      date
-    )} schedule=${JSON.stringify(schedule)}`
-  );
+  const db = getFirestore(getAdminApp());
+  const docId = todayDocId(date);
+  await db.collection("daily_schedules").doc(docId).set(schedule, { merge: true });
 }

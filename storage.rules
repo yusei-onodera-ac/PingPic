@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // PingPic Storage security rules — SCAFFOLD.
-// Inferred requirement: posts.photo_url implies a Storage bucket, though the
+// Inferred requirement: posts.photoUrl implies a Storage bucket, though the
 // design doc's data model section never names one explicitly.
 //
 // Cost note: photo uploads are the main storage/egress cost driver. Client

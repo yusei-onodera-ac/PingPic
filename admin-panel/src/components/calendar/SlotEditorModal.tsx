@@ -9,9 +9,9 @@ interface Props {
 }
 
 /**
- * TODO: implement real editing UX — per-slot send_time picker (respecting
+ * TODO: implement real editing UX — per-slot sendTime picker (respecting
  * the 07:00-22:00 / >=4h-apart rule client-side too, as a UX nicety; the
- * server-side batch job is the real enforcement point), prompt_text input,
+ * server-side batch job is the real enforcement point), promptText input,
  * and save-to-Firestore wiring. This scaffold only proves the modal opens
  * with the right date context.
  */
@@ -36,7 +36,7 @@ export function SlotEditorModal({ dateId, schedule, onClose }: Props) {
       >
         <h2>{dateId}</h2>
         <p>{schedule ? `${schedule.slots.length} slots configured` : "No schedule set yet"}</p>
-        <p style={{ color: "#888" }}>TODO: slot editor form (send_time, prompt_text, credit)</p>
+        <p style={{ color: "#888" }}>TODO: slot editor form (sendTime, promptText, credit)</p>
         <button onClick={onClose}>Close</button>
       </div>
     </div>

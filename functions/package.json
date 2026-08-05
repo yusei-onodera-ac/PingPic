@@ -18,6 +18,7 @@
     "deploy": "firebase deploy --only functions"
   },
   "dependencies": {
+    "@google-cloud/tasks": "^5.3.0",
     "@pingpic/shared-types": "*",
     "firebase-admin": "^12.3.0",
     "firebase-functions": "^5.0.0"
