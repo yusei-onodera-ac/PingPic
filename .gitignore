@@ -4,7 +4,11 @@ npm-debug.log*
 yarn-error.log*
 .pnpm-store/
 dist/
-lib/
+# Anchored to repo root + specifically functions/ — an earlier unanchored
+# "lib/" here also matched mobile/lib/ (the actual Flutter source tree!)
+# and admin-panel/src/lib/, silently excluding both from every commit
+# until this was caught. Never write a bare "lib/" pattern in this repo.
+/functions/lib/
 .next/
 out/
 *.tsbuildinfo
