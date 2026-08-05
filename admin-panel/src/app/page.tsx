@@ -1,8 +1,11 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default function RootPage() {
-  // TODO: once useAuth's state is readable server-side (post session-cookie
-  // migration, see AuthGuard.tsx TODO), redirect straight to /calendar for
-  // already-authenticated admins instead of always going through /login.
-  redirect("/login");
+  // Cheap presence check only (no Admin SDK verification here) — if it's
+  // wrong (stale/invalid cookie), (admin)/layout.tsx's real verification
+  // bounces back to /login anyway, so this is just a UX shortcut for the
+  // common case of an already-signed-in admin landing on "/".
+  const hasSessionCookie = cookies().has("session");
+  redirect(hasSessionCookie ? "/calendar" : "/login");
 }

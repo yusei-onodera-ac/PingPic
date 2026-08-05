@@ -22,11 +22,13 @@ npm run lint
 | `/prompt-pool` | "Popular prompt" stock CRUD                  | working — add/list/delete (`usePromptPool`) |
 
 Still TODO on all three: nicer UX (the calendar's slot editor and the suggestion-adopt dialog are
-functional but plain forms, not polished), and the admin-auth hardening noted below.
+functional but plain forms, not polished).
 
-`(admin)` is a route group wrapping the above three behind `AuthGuard` (client-side redirect to
-`/login` if signed out or missing the `admin` custom claim — see
-[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the production-hardening TODO on this).
+`(admin)` is a route group whose `layout.tsx` is a Server Component that verifies the session
+cookie (`Admin SDK.verifySessionCookie`) on every request — the real auth boundary; `middleware.ts`
+only does a fast cookie-presence check for UX. See [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
+"Resolved: admin auth" and [docs/SETUP.md](../docs/SETUP.md) for how to grant the first admin's
+`admin: true` claim (`scripts/grant-admin-claim.mjs` — there's no self-service path).
 
 Deploy target: Vercel (free/Hobby tier) by default — see cost notes in
 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).

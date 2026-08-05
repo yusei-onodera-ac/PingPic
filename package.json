@@ -13,9 +13,11 @@
     "lint": "npm run lint --workspaces --if-present",
     "type-check": "npm run type-check --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "emulators": "firebase emulators:start --only firestore,functions,auth,storage"
+    "emulators": "firebase emulators:start --only firestore,functions,auth,storage",
+    "grant-admin-claim": "node scripts/grant-admin-claim.mjs"
   },
   "devDependencies": {
+    "firebase-admin": "^12.3.0",
     "prettier": "^3.3.0"
   },
   "engines": {

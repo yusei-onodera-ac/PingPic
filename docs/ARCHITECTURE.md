@@ -30,7 +30,8 @@ scaffold.
 3. At each scheduled time, a push goes out; tapping it deep-links the Flutter app straight to the
    camera screen (`go_router`).
 4. The user shoots a photo with the in-app-only camera and it's written to `posts/{postId}` +
-   Storage under `posts/{uid}/...`.
+   Storage under `posts/{groupId}/{uid}/...` (groupId is in the path so `storage.rules` can check
+   group membership without custom object metadata).
 5. The iOS home screen widget (WidgetKit) reads the latest prompt + group post status from a
    shared App Group container that the Flutter app keeps updated via the `home_widget` package.
 
@@ -51,10 +52,10 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
   comfortably inside free-tier allowances at 3 tasks/day.
 - **Firestore reads/writes**: avoid fan-out writes (e.g. don't write a "notified" doc per user per
   slot). Prefer topic messaging + client-side read state where possible.
-- **Storage egress**: photo uploads are the dominant cost driver at scale. The Flutter camera
-  repository (`mobile/lib/features/camera/data/camera_repository.dart`) has a TODO to
-  compress/resize images client-side before upload; `storage.rules` caps upload size at 8MB as a
-  guardrail.
+- **Storage egress**: photo uploads are the dominant cost driver at scale. `CaptureController`
+  (`mobile/lib/features/camera/application/camera_controller.dart`) compresses to ~1600px /
+  quality 80 before ever holding the bytes in state; `storage.rules` caps upload size at 8MB as a
+  backstop, not the primary control.
 - **Admin panel hosting**: default to deploying `admin-panel` on **Vercel's free/Hobby tier**
   rather than Firebase Hosting + Cloud Run "web frameworks" support, to avoid paying for an
   always-on container for what's a low-traffic internal tool. `firebase.json` deliberately does
@@ -65,9 +66,6 @@ to comfortably fit inside the free-tier allowances of that plan for a small-to-m
 
 ## Known open gaps
 
-- **Admin auth**: production should move from the client-side `AuthGuard` redirect to Next.js
-  `middleware.ts` + session cookies (`Admin SDK.createSessionCookie`). Scaffolded as a TODO —
-  see `admin-panel/src/components/layout/AuthGuard.tsx`.
 - **Hosting choice for `admin-panel`**: Vercel vs. Firebase Hosting is left open; see above.
 - **No "leave group" / multi-group support**: the invite-code flow (below) is intentionally an
   MVP simplification — one group per user, no leave flow.
@@ -89,6 +87,23 @@ with a server-side Firestore transaction, and `firestore.rules` stays simple (me
 their own group; everything else is `allow write: if false`). This also finally let
 `posts` and Storage's `storage.rules` enforce real group-membership checks instead of the
 placeholder TODOs from earlier passes.
+
+### Resolved: admin auth (session cookies + server-side verification)
+
+Previously a client-side-only `AuthGuard` component (checked the Firebase Auth state and custom
+claim in the browser, redirected if missing) — real content was still delivered to the browser
+before that check ran, and nothing was verified server-side. Now:
+
+- `/login` signs in with the client SDK, then exchanges the ID token for an HttpOnly session
+  cookie via `POST /api/session` (`admin-panel/src/app/api/session/route.ts`), which verifies the
+  token and the `admin` claim with the Admin SDK before issuing the cookie.
+- `(admin)/layout.tsx` (a Server Component, Node.js runtime) calls `verifySessionCookie` on every
+  request — this is the real boundary now.
+- `middleware.ts` (Edge runtime) only does a cheap cookie-presence check for UX, since the Admin
+  SDK can't run at the Edge in Next.js 14 — real verification is left entirely to the layout.
+- The first (and every subsequent) admin's `admin: true` custom claim is granted via
+  `scripts/grant-admin-claim.mjs`, run locally with a service account key — deliberately not a
+  self-service admin-panel action. See [SETUP.md](./SETUP.md).
 
 ### Resolved: group feed UI
 

@@ -79,12 +79,38 @@ and reference it via `firebase-functions/params` `defineSecret` in code (see
 
 ```bash
 cd admin-panel
-cp .env.local.example .env.local   # fill in your Firebase web app config
+cp .env.local.example .env.local   # fill in your Firebase web app config AND
+                                    # FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON (server-only —
+                                    # see that file's comment on where to get it)
 npm install
 npm run dev
 ```
 
 Visit http://localhost:3000 — should redirect to `/login`.
+
+### Bootstrapping the first admin
+
+Nobody can sign in successfully until at least one Firebase Auth account has the `admin: true`
+custom claim — there's no self-service path to get it (that would defeat the point). From the
+repo root, with a downloaded service account key:
+
+```bash
+npm run grant-admin-claim -- --email=you@example.com --service-account=./serviceAccountKey.json
+```
+
+The account must already exist in Firebase Auth (create it via the Firebase Console or have the
+person sign up once and fail to get in first). See `scripts/grant-admin-claim.mjs` for the
+revoke flag and more detail.
+
+### How sign-in actually gates access
+
+`/login` signs in with the Firebase client SDK, then POSTs the resulting ID token to
+`/api/session` (`admin-panel/src/app/api/session/route.ts`), which verifies it with the Admin SDK,
+checks the `admin` claim, and — only if that passes — sets an HttpOnly session cookie. The
+`(admin)/layout.tsx` Server Component re-verifies that cookie (`verifySessionCookie`, with
+`checkRevoked`) on every request; `middleware.ts` only does a cheap cookie-presence check for
+UX (Next.js 14 middleware runs on the Edge runtime, which can't run the Admin SDK — the layout is
+where real verification happens). See [ARCHITECTURE.md](./ARCHITECTURE.md) for more.
 
 Deploy target: **Vercel (free/Hobby tier)** by default — see the cost note in
 [ARCHITECTURE.md](./ARCHITECTURE.md). Firebase Hosting + Cloud Run is an open alternative, not
